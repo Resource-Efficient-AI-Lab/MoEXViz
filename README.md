@@ -1,10 +1,10 @@
-# MoEViz: A Mixture-of-Experts Visualizer
+# MoEViz: A Mixture-of-Experts Visualizer [![MIT license](http://img.shields.io/badge/license-MIT-brightgreen.svg)](http://opensource.org/licenses/MIT)
+
 
 MoEViz is an interactive visualization tool for learning how Mixture-of-Experts (MoE) language
 models work. It runs on real pre-computed routing data from three different MoE models. Every
 matrix, weight and expert selection you see is what the model actually did. 
 
-[![MIT license](http://img.shields.io/badge/license-MIT-brightgreen.svg)](http://opensource.org/licenses/MIT)
 
 
 ## How to Use
