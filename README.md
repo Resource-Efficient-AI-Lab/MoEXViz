@@ -1,4 +1,8 @@
-# MoEViz: A Mixture-of-Experts Visualizer [![MIT license](http://img.shields.io/badge/license-MIT-brightgreen.svg)](http://opensource.org/licenses/MIT)
+# MoEViz: A Mixture-of-Experts Visualizer
+
+<p align="center">
+  <a href="http://opensource.org/licenses/MIT"><img src="http://img.shields.io/badge/license-MIT-brightgreen.svg" alt="MIT license"></a>
+</p>
 
 
 MoEViz is an interactive visualization tool for learning how Mixture-of-Experts (MoE) language
