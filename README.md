@@ -16,7 +16,7 @@ matrix, weight and expert selection you see is what the model actually did.
 ### Quick start
 
 1. Pick a **model** and a **prompt** from the dropdowns at the top.
-2. Click **▶ Start tour** for a guided walkthrough of one transformer layer, then use
+2. Click **Start tour** for a guided walkthrough of one transformer layer, then use
    **‹ Back** / **Next ›** / **Finish**.
 3. Or explore freely: hover a block in the flow row to see what opens, click it for the full math.
 4. Switch to **Domain Specialization Analysis** to see which experts specialize in which kind of
@@ -32,7 +32,7 @@ Shows one transformer layer as a left-to-right flow of blocks, with the real num
   *Combined Weighted Output* opens the expert-combination math.
 - **Router view**: *Single token routing* shows one token choosing its experts; *All tokens
   routing* is a heatmap of every token against every expert. Page through layers with **Layer
-  ‹ ›**, or let **▶ Step through layers** walk the stack for you.
+  ‹ ›**, or let **Step through layers** walk the stack for you.
 - **‹ ›** beside the layer title moves to the next transformer layer. The card deck behind it is
   the rest of the stack.
 
