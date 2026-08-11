@@ -1,11 +1,11 @@
-# MoEViz: A Mixture-of-Experts Visualizer
+# MoEXViz: A Mixture-of-Experts Visualizer
 
 <p align="center">
   <a href="http://opensource.org/licenses/MIT"><img src="http://img.shields.io/badge/license-MIT-brightgreen.svg" alt="MIT license"></a>
 </p>
 
 
-MoEViz is an interactive visualization tool for learning how Mixture-of-Experts (MoE) language
+MoEXViz is an interactive visualization tool for learning how Mixture-of-Experts (MoE) language
 models work. It runs on real pre-computed routing data from three different MoE models. Every
 matrix, weight and expert selection you see is what the model actually did. 
 
@@ -69,13 +69,13 @@ legal, creative writing, conversational):
 #### Steps
 
 ```bash
-git clone https://github.com/Resource-Efficient-AI-Lab/MoEViz.git
-cd MoEViz
+git clone https://github.com/Resource-Efficient-AI-Lab/MoEXViz.git
+cd MoEXViz
 npm install
 npm run dev
 ```
 
-Then open http://localhost:5173 in your browser.
+Then open http://localhost:5173/MoEXViz/ in your browser.
 
 ## License
 
