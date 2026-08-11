@@ -80,13 +80,25 @@
   min-height: 100vh;
   padding: 6px 0.5in 24px;
 }
-.moe-wrap { max-width: 1440px; margin: 0 auto 0 0; }
+/* Raised 1440 → 1920 (2026-08-11, by request: a wide external monitor left ~500px of dead space to
+   the right of every panel while the header rule ran to the edge, which read as broken layout).
+   The extra width is FRAMING, not growth: .pdf-flow-row's children sum to a hard 1386px (measured;
+   embed 200 + stage 972 + final-norm 44 + out 110 + three 20px connectors) because .layer-stage is
+   width-locked by applyStageLock and none of the out-of-card blocks flex-grow. So every pixel past
+   ~1418 becomes symmetric slack under `justify-content: safe center` — the panel border lines up
+   with header.full-bleed's rule and the diagram centres inside it. Same for the domain tab, whose
+   UMAP is capped at max-w-2xl + mx-auto in DomainTab.tsx; this widens its margins, it does not
+   create them. A larger cap (or none) would strand the 1386px diagram in an absurd panel on an
+   ultrawide. Purely a max-width, so it is a no-op at every viewport ≤ ~1536px: none of the narrow
+   -viewport work below (the 1009/1025 overflow onsets, the 1141px/1080px queries, flex-shrink 0.25,
+   the connector floors) is affected. */
+.moe-wrap { max-width: 1920px; margin: 0 auto 0 0; }
 /* Runs an element to both viewport edges while keeping its content on the page's content column.
    -0.5in cancels .moe-root's own horizontal padding exactly at any width — the element sits inside
    .moe-wrap, whose left edge IS that padding edge — 100vw spans the viewport, and the padding puts
    the content back on the column. Same technique as .top-tabs.
    NOT margin-left: calc(50% - 50vw) with a percentage-derived padding: that is centring math, and
-   .moe-wrap is left-aligned (margin: 0 auto 0 0) capped at 1440px, so past ~1536px it overshot to
+   .moe-wrap is left-aligned (margin: 0 auto 0 0) capped at 1920px, so past ~2016px it overshot to
    the left — the header title sat ~204px in while every row below it sat at 48px — and fell short
    on the right. The mismatch was invisible while the title was 20px/650 and obvious once it wasn't. */
 .full-bleed {
