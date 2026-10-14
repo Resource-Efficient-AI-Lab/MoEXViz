@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import './moe.css';
+import './domain-reference.css';
 import { useCategoryMultiSelect } from '../components/ClusterPlot/CategoryTogglePicker';
 import { CATEGORIES } from '../data/categories';
 import { ArchitectureTab } from './arch/ArchitectureTab';
@@ -29,6 +30,17 @@ export function MoeApp() {
   // Deliberately independent of the Architecture tab's own model dropdown: the two tabs read
   // different data files and the reader may well want to compare across them.
   const [domainModelKey, setDomainModelKey] = useState<DomainModelKey>(DEFAULT_DOMAIN_MODEL_KEY);
+  // Comparison state follows the reference domain tab and survives top-tab switches.
+  const [domainCompareKeys, setDomainCompareKeys] = useState<DomainModelKey[]>([]);
+  const changeDomainModel = (next: DomainModelKey) => {
+    setDomainCompareKeys((keys) => keys.map((k) => (k === next ? domainModelKey : k)));
+    setDomainModelKey(next);
+  };
+  const [domainBlockedKeys, setDomainBlockedKeys] = useState<DomainModelKey[]>([]);
+  const toggleDomainCompare = (key: DomainModelKey) =>
+    setDomainCompareKeys((keys) =>
+      keys.includes(key) ? keys.filter((k) => k !== key) : [...keys, key]
+    );
   // The Experts UMAP sub-tab's own category picker (independent of that tab's shared picker).
   // Lifted all the way up here for the same reason as the model key: its section unmounts on every
   // sub-tab switch and the whole tab unmounts on every top-tab switch, either of which would throw
@@ -46,7 +58,7 @@ export function MoeApp() {
   const { manifest, flow, loading, error } = usePromptFlow(archModelKey, promptIndex);
 
   return (
-    <div className="moe-root">
+    <div className="moe-root" data-active-tab={tab}>
       <div className="moe-wrap">
         <header className="full-bleed">
           <h1 className="app-title">
@@ -67,7 +79,13 @@ export function MoeApp() {
         )}
 
         {tab === 'domain' && (
-          <DomainModelPicker modelKey={domainModelKey} onModelChange={setDomainModelKey} />
+          <DomainModelPicker
+            modelKey={domainModelKey}
+            onModelChange={changeDomainModel}
+            compareKeys={domainCompareKeys}
+            onToggleCompare={toggleDomainCompare}
+            blockedKeys={domainBlockedKeys}
+          />
         )}
 
         <div className="top-tabs">
@@ -89,6 +107,8 @@ export function MoeApp() {
 
         <ArchitectureTab
           visible={tab === 'explorer'}
+          modelKey={archModelKey}
+          loading={loading}
           flow={flow}
           promptIndex={promptIndex}
           error={error}
@@ -98,6 +118,8 @@ export function MoeApp() {
           <DomainTab
             syncCategory={archCategory}
             modelKey={domainModelKey}
+            compareKeys={domainCompareKeys}
+            onBlockedCompareChange={setDomainBlockedKeys}
             umapActive={umapPicker.active}
             onUmapToggle={umapPicker.toggle}
           />

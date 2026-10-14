@@ -70,10 +70,8 @@ export function PromptsSection({ data }: { data: DomainSpecializationData }) {
   return (
     <div>
       <p className="math-hint" style={{ margin: '0 0 8px' }}>
-        The real passages each category&rsquo;s routing statistics were computed from
-        {perCategory > 1
-          ? ` — ${perCategory} per category, run through the model one after another and counted together.`
-          : '.'}
+        The real passages every statistic here was computed from
+        {perCategory > 1 ? ` — ${perCategory} per category.` : '.'}
       </p>
 
       <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">

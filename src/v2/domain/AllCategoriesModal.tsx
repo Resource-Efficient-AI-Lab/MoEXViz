@@ -2,12 +2,14 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { ExpertGridSection, fitExpertGridTiles, TILE_CAPTION_H } from './ExpertGridSection';
 import { fitHistogramCards, HistogramSection } from './HistogramSection';
 import { LayerSlider } from './LayerSlider';
+import { firstMoeLayer } from '../../utils/domainStats';
+import { useDraggable } from '../useDraggable';
 import type { DomainSpecializationData } from '../../data/types';
 
 interface AllCategoriesModalProps {
   data: DomainSpecializationData;
   layer: number;
-  /** First layer that routes between experts, same floor the sub-tab's slider clamps to. */
+  /** First layer that routes between experts, same floor the sub-tab's layer pager stops at. */
   minLayer: number;
   /** Writes straight back to the tab's shared layer state, so closing the window leaves the
    *  sub-tab on whatever layer the reader walked to in here rather than snapping back. */
@@ -45,6 +47,11 @@ export function AllCategoriesModal({
   suppressEscape,
   onClose,
 }: AllCategoriesModalProps) {
+  // Handle is the header row only, not the whole window — the body below it is six grids' or
+  // charts' worth of real click/hover targets (a cell opens DomainCellModal), which a
+  // drag-anywhere would otherwise steal a pointerdown from.
+  const drag = useDraggable();
+
   useEffect(() => {
     if (suppressEscape) return;
     const onKeyDown = (ev: KeyboardEvent) => {
@@ -133,10 +140,18 @@ export function AllCategoriesModal({
       : undefined;
 
   return (
-    // z-40, one step under DomainCellModal's z-50: a histogram bar in here still opens the
+    // z-40, one step under DomainCellModal's z-50: a cell or bar in here still opens the
     // exact-numbers modal, and it has to land on top of this one.
     <div
       className="fixed inset-0 z-40 flex items-center justify-center bg-ink/40 p-5"
+      // Lets DomainTab's "Highlight it on the chart" (showDemoOnChart) scope its querySelector to
+      // this window specifically — it renders the exact same ExpertGridSection/HistogramSection
+      // tiles, with the exact same data-category-tile/data-category-chart/data-expert-num
+      // attributes, as the sub-tab's own single/pair-category view behind it. An unscoped query
+      // would find that other, now-hidden-behind-this-modal copy first (same DOM-order match every
+      // time, since this modal always renders after it) and point the ghost at a tile the reader
+      // can't see.
+      data-all-categories-modal=""
       role="dialog"
       aria-modal="true"
       aria-label={`All categories, layer ${layer + 1}`}
@@ -149,13 +164,23 @@ export function AllCategoriesModal({
           height — the class now says so instead of stating a cap the cascade throws away. It
           matters beyond tidiness: the grid view sizes its tiles from the body's measured height,
           and a dialog that sized to its content would make that measurement chase itself. */}
-      <div className="moe-root flex h-screen w-full max-w-[1400px] flex-col overflow-hidden rounded-md bg-paper shadow-overlay-float">
-        <div className="flex items-start justify-between gap-3 border-b border-ink/10 px-5 py-3">
+      <div
+        className="moe-root flex h-screen w-full max-w-[1400px] flex-col overflow-hidden rounded-md bg-paper shadow-overlay-float"
+        style={{ transform: `translate(${drag.offset.x}px, ${drag.offset.y}px)` }}
+      >
+        <div
+          className="tour-card-draggable flex items-start justify-between gap-3 border-b border-ink/10 px-5 py-3"
+          style={{ touchAction: 'none' }}
+          onPointerDown={drag.onPointerDown}
+          onPointerMove={drag.onPointerMove}
+          onPointerUp={drag.onPointerUp}
+          onPointerCancel={drag.onPointerUp}
+        >
           <div className="min-w-0 flex-1">
-            {/* The layer readout moved out of the title and into the slider beside it, rather
-                than being kept in both: two live "20 / 28"s on one line read as two different
-                numbers that happen to agree. The title keeps its landmark position and the
-                slider sits exactly where that readout was. */}
+            {/* The layer readout moved out of the title and into the layer control beside it,
+                rather than being kept in both: two live "20 / 28"s on one line read as two
+                different numbers that happen to agree. The title keeps its landmark position and
+                the layer control sits exactly where that readout was. */}
             <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
               <h3 className="font-title text-base font-semibold text-ink">
                 All {data.domains.length} categories
@@ -164,7 +189,7 @@ export function AllCategoriesModal({
                 layer={layer}
                 numLayers={data.num_layers}
                 minLayer={minLayer}
-                id="all-categories-layer-slider"
+                denseLayers={firstMoeLayer(data)}
                 onChange={onLayerChange}
               />
             </div>
@@ -193,6 +218,7 @@ export function AllCategoriesModal({
               data={data}
               activeCategories={allCategories}
               layer={layer}
+              onCellClick={onBarClick}
               hideHint
               fit={gridFit}
             />

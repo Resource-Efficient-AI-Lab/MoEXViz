@@ -18,11 +18,16 @@ interface Loaded {
   error: Error | null;
 }
 
-export function useDomainSpecialization(modelKey: DomainModelKey): UseDomainSpecializationResult {
-  const specPath = domainModel(modelKey).specPath;
+/** `null` is "don't fetch" — lets a caller with a variable number of models (the compare columns)
+ *  call this a fixed number of times, as hooks require, and only pay for the ones in use. */
+export function useDomainSpecialization(
+  modelKey: DomainModelKey | null
+): UseDomainSpecializationResult {
+  const specPath = modelKey ? domainModel(modelKey).specPath : null;
   const [loaded, setLoaded] = useState<Loaded>({ data: null, error: null });
 
   useEffect(() => {
+    if (!specPath) return;
     let cancelled = false;
 
     fetch(`${import.meta.env.BASE_URL}data/${specPath}`)
@@ -54,5 +59,5 @@ export function useDomainSpecialization(modelKey: DomainModelKey): UseDomainSpec
   const data = fresh ? loaded.data : null;
   const error = fresh ? loaded.error : null;
 
-  return { data, loading: !data && !error, error };
+  return { data, loading: !!specPath && !data && !error, error };
 }

@@ -78,7 +78,7 @@ export function CategoryTogglePicker({ categories, active, onToggle }: CategoryT
             aria-pressed={isActive}
             className={`rounded-full px-2.5 py-1 font-body text-xs font-medium transition-colors duration-150 ${
               isSole ? 'cursor-default' : ''
-            } ${isActive ? '' : 'bg-surface text-muted hover:text-ink'}`}
+            } ${isActive ? '' : 'bg-[var(--pill-neutral)] text-muted hover:text-ink'}`}
             style={
               isActive
                 ? { backgroundColor: CATEGORY_PALETTE[category], color: 'var(--color-paper)' }

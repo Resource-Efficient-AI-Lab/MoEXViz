@@ -31,6 +31,10 @@ interface DomainModel {
   specPath: string;
   /** Path under `${BASE_URL}data/` to the Experts UMAP sub-tab's projection of the same run. */
   umapPath: string;
+  /** 0-based index of the first layer that routes between experts: 0 for OLMoE and JetMoE, 1 for
+   *  DeepSeek, whose layer 0 is a dense feed-forward layer (also `dense_layers` in its data file).
+   *  Known up front so the model buttons can be gated before that model's data has loaded. */
+  firstRoutedLayer: number;
 }
 
 export const DOMAIN_MODELS: DomainModel[] = [
@@ -39,18 +43,21 @@ export const DOMAIN_MODELS: DomainModel[] = [
     label: archModel('olmoe').label,
     specPath: 'OLMoE/domain_specialization.json',
     umapPath: 'OLMoE/domain_specialization_umap.json',
+    firstRoutedLayer: 0,
   },
   {
     key: 'jetmoe',
     label: archModel('jetmoe').label,
     specPath: 'JETMoe/jetmoe_domain_specialization.json',
     umapPath: 'JETMoe/jetmoe_domain_specialization_umap.json',
+    firstRoutedLayer: 0,
   },
   {
     key: 'deepseek',
     label: archModel('deepseek').label,
     specPath: 'DeepSeek/deepseek_domain_specialization.json',
     umapPath: 'DeepSeek/deepseek_domain_specialization_umap.json',
+    firstRoutedLayer: 1,
   },
 ];
 

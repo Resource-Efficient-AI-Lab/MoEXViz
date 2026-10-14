@@ -67,9 +67,15 @@ export function DomainRateChart({ data, activeCategories }: DomainRateChartProps
   return (
     <div>
       <p className="math-hint" style={{ margin: '0 0 8px' }}>
-        For each toggled category, the mean activation rate of its own {data.top_k_experts}{' '}
-        most-used experts at each layer, showing how strongly that category leans on its specialists
-        as depth increases.
+        Mean activation rate of each category's {data.top_k_experts} most-used experts, by layer —
+        how strongly it leans on a small set of specialists as depth grows.
+        {minLayer > 0 && (
+          <strong>
+            {minLayer > 1
+              ? ` Layers 1–${minLayer} are dense feed-forward layers with no experts, so the chart starts at layer ${minLayer + 1}.`
+              : ' Layer 1 is a dense feed-forward layer with no experts, so the chart starts at layer 2.'}
+          </strong>
+        )}
       </p>
 
       <div className="relative mt-4 rounded-md border border-ink/10 bg-paper p-3">
@@ -87,7 +93,8 @@ export function DomainRateChart({ data, activeCategories }: DomainRateChartProps
                 x2={VIEW_W - PAD_R}
                 y1={ly(v)}
                 y2={ly(v)}
-                stroke="var(--color-surface)"
+                stroke="var(--color-ink)"
+                strokeOpacity={0.07}
                 strokeWidth={1}
               />
               <text
@@ -95,7 +102,7 @@ export function DomainRateChart({ data, activeCategories }: DomainRateChartProps
                 y={ly(v) + 4}
                 textAnchor="end"
                 className="font-label"
-                fontSize={8}
+                fontSize={11}
                 fill="var(--color-muted)"
               >
                 {(v * 100).toFixed(0)}%
@@ -111,7 +118,7 @@ export function DomainRateChart({ data, activeCategories }: DomainRateChartProps
                 y={VIEW_H - PAD_B + 16}
                 textAnchor="middle"
                 className="font-label"
-                fontSize={8}
+                fontSize={11}
                 fill="var(--color-muted)"
               >
                 {li + 1}
@@ -122,7 +129,7 @@ export function DomainRateChart({ data, activeCategories }: DomainRateChartProps
             y={VIEW_H - 4}
             textAnchor="middle"
             className="font-label"
-            fontSize={8}
+            fontSize={11}
             fill="var(--color-muted)"
           >
             Layer
@@ -132,7 +139,7 @@ export function DomainRateChart({ data, activeCategories }: DomainRateChartProps
             y={PAD_T + plotH / 2}
             textAnchor="middle"
             className="font-label"
-            fontSize={7}
+            fontSize={10}
             fill="var(--color-muted)"
             transform={`rotate(-90 12 ${PAD_T + plotH / 2})`}
           >
@@ -149,14 +156,18 @@ export function DomainRateChart({ data, activeCategories }: DomainRateChartProps
               .join(' ');
             return (
               <g key={category}>
-                <path d={d} fill="none" stroke={color} strokeWidth={2.2} />
+                <path d={d} fill="none" stroke={color} strokeWidth={2} />
                 {layers.map((li) => (
                   <circle
                     key={li}
                     cx={lx(li)}
                     cy={ly(values[li])}
-                    r={3.2}
+                    r={2.8}
                     fill={color}
+                    // WorkedExampleModal's "Show me on the chart" target (see DomainTab.tsx) —
+                    // dispatches a real `mousemove` here to pop this same tooltip.
+                    data-rate-category={category}
+                    data-rate-layer={li}
                     onMouseMove={(e) => {
                       const rect = e.currentTarget.ownerSVGElement!.getBoundingClientRect();
                       setHover({

@@ -1,0 +1,126 @@
+/* Domain styles copied from craman-bu/moeviz at ef9da0897243804b6c304cfbeb6c24b4de0031d2.
+   Shared selectors are scoped to the Domain tab so the existing Architecture tutorial keeps
+   its own appearance. Domain components and their supporting TypeScript are copied verbatim. */
+
+.moe-root[data-active-tab="domain"] {
+  background: var(--surface-1);
+}
+
+.moe-root[data-active-tab="domain"] .sub-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin: 2px 0 8px; }
+.moe-root[data-active-tab="domain"] .sub-tab {
+  border: 1.5px solid transparent; color: var(--text-primary);
+  background: var(--pill-neutral);
+  font-size: 12px; font-weight: 700; padding: 6px 12px; border-radius: 999px; cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+}
+.moe-root[data-active-tab="domain"] .sub-tab:hover {
+  color: var(--text-primary);
+  background: var(--pill-neutral-hover);
+}
+.moe-root[data-active-tab="domain"] .sub-tab.active {
+  color: var(--seq-500); border-color: var(--seq-500);
+  background: color-mix(in srgb, var(--seq-500) 8%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--seq-500) 14%, transparent);
+}
+.moe-root[data-active-tab="domain"] .sub-tab:disabled { opacity: 0.45; cursor: not-allowed; }
+.moe-root[data-active-tab="domain"] .sub-tab:disabled:hover { color: var(--text-primary); background: var(--pill-neutral); }
+
+.view-switch {
+  position: relative; display: grid; grid-template-columns: 1fr 1fr; gap: 6px;
+  padding: 0; border: 0; background: transparent; font-family: inherit; cursor: pointer;
+}
+.view-switch:focus-visible { outline: 2px solid var(--seq-500); outline-offset: 2px; border-radius: 999px; }
+.view-switch-thumb {
+  position: absolute; top: 0; bottom: 0; left: 0; width: calc(50% - 3px);
+  border-radius: 999px; background: var(--seq-500);
+  transition: transform 240ms var(--ease-out-expo);
+}
+.view-switch[data-side="1"] .view-switch-thumb { transform: translateX(calc(100% + 6px)); }
+.view-switch-label {
+  position: relative; padding: 5px 14px; text-align: center; white-space: nowrap;
+  border-radius: 999px; background: var(--pill-neutral);
+  font-size: 12px; font-weight: 500; line-height: 1.4; color: var(--color-muted);
+  transition: color 240ms var(--ease-out-expo), background-color 240ms var(--ease-out-expo);
+}
+.view-switch:hover .view-switch-label:not(.active) { color: var(--color-ink); }
+.view-switch-label.active { background: transparent; color: var(--color-paper); }
+
+.open-all-link {
+  border: 0; background: transparent; padding: 0 4px; font-family: inherit; cursor: pointer;
+  font-size: 12px; font-weight: 700; line-height: 1.5; color: var(--text-primary);
+  text-decoration: underline; text-decoration-color: transparent; text-underline-offset: 3px;
+  transition: color 160ms var(--ease-out-expo), text-decoration-color 160ms var(--ease-out-expo);
+}
+
+#domain-model-select option:checked { font-weight: 700; }
+.domain-compare-label { margin-left: 14px; font-size: 12.5px; font-weight: 650; color: var(--text-secondary); }
+.domain-compare-btn {
+  border: 1.5px solid transparent; color: var(--text-primary);
+  background: var(--pill-neutral);
+  font-size: 12px; font-weight: 700; padding: 6px 12px; border-radius: 999px; cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+}
+.domain-compare-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.domain-compare-btn:disabled:hover { background: var(--pill-neutral); }
+.domain-compare-btn:hover { background: var(--pill-neutral-hover); }
+.domain-compare-btn.active {
+  color: var(--seq-500); border-color: var(--seq-500);
+  background: color-mix(in srgb, var(--seq-500) 8%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--seq-500) 14%, transparent);
+}
+.domain-compare-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; align-items: start; }
+.domain-compare-col { min-width: 0; }
+.domain-compare-col-title {
+  margin: 0 0 8px; padding-bottom: 6px; border-bottom: 1.5px solid var(--border);
+  font-size: 13px; font-weight: 700; color: var(--text-primary);
+}
+
+.moe-root[data-active-tab="domain"] .tour-card p {
+  font-size: 12.5px; color: var(--text-secondary); line-height: 1.55; margin: 0; white-space: pre-line;
+}
+.domain-tour-controls .play-btn { font-weight: 700; border-width: 1.5px; border-color: var(--text-secondary); }
+.domain-tour-controls .play-btn:disabled { border-color: var(--border); }
+.domain-tour-controls .play-btn { margin-left: 0; }
+.domain-tour-primary-btn {
+  background: var(--seq-500); border-color: var(--seq-500); color: #fff;
+}
+.domain-tour-primary-btn:hover { background: color-mix(in srgb, var(--seq-500) 85%, black); }
+.tour-overlay-br { justify-content: flex-end; }
+.tour-card-draggable { cursor: grab; user-select: none; }
+.tour-card-draggable:active { cursor: grabbing; }
+.tour-click-ghost { position: fixed; z-index: 130; pointer-events: none; transform: translate(-50%, -50%); }
+.tour-click-ghost-dot {
+  position: absolute; inset: 0; margin: auto; width: 10px; height: 10px; border-radius: 50%;
+  background: var(--seq-500); box-shadow: 0 1px 4px rgba(0,0,0,0.35);
+}
+.tour-click-ghost-ring {
+  position: absolute; inset: 0; margin: auto; width: 10px; height: 10px; border-radius: 50%;
+  border: 2px solid var(--seq-500); animation: tour-click-ripple 0.55s ease-out forwards;
+}
+@keyframes tour-click-ripple {
+  from { width: 10px; height: 10px; opacity: 0.9; }
+  to { width: 46px; height: 46px; opacity: 0; }
+}
+.demo-highlight {
+  stroke: var(--color-amber-signal); stroke-width: 3px;
+  outline: 2.5px solid var(--color-amber-signal); outline-offset: 1px;
+  animation: demo-highlight-pulse 1.1s ease-in-out infinite;
+}
+@keyframes demo-highlight-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+.domain-tour-start-btn {
+  background: var(--seq-500); border-color: var(--seq-500); color: #fff; font-weight: 700;
+}
+.domain-tour-start-btn:hover { background: color-mix(in srgb, var(--seq-500) 85%, black); }
+.domain-tour-start-btn, .domain-tour-controls .play-btn {
+  border-radius: 999px; font-size: 12px; padding: 6px 14px;
+}
+.domain-compare-col-title {
+  margin: 0 0 10px; padding-bottom: 8px; border-bottom: 1px solid var(--border);
+  font-size: 11.5px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--text-secondary);
+}
+.moe-root[data-active-tab="domain"] .prompt-picker select { font-weight: 700; }
+.moe-root[data-active-tab="domain"] .prompt-picker select option:checked { font-weight: 700; }

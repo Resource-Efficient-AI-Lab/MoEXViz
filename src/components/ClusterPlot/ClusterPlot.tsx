@@ -13,6 +13,8 @@ const PAD = 20;
 
 const IDLE_OPACITY = 0.35;
 const ACTIVE_OPACITY = 0.9;
+const DOT_R = 4.4;
+const HIT_R = 7;
 
 interface ClusterPlotProps {
   umap: UmapData;
@@ -153,12 +155,17 @@ export function ClusterPlot({ umap, activeCategories }: ClusterPlotProps) {
             const isActive = activeCategories.has(p.dominant_category);
             return (
               <g key={`${p.layer_id}-${p.expert_id}`} data-cat={p.dominant_category}>
-                {/* Invisible wider hit target so small dots are hoverable. */}
+                {/* Invisible wider hit target so small dots are hoverable. Also WorkedExampleModal's
+                    "Show me on the chart" target (see DomainTab.tsx) — it dispatches a real
+                    `mousemove` at this exact element to pop the same tooltip a reader's own hover
+                    would. */}
                 <circle
                   cx={p.px}
                   cy={p.py}
-                  r={7}
+                  r={HIT_R}
                   fill="transparent"
+                  data-umap-layer={p.layer_id}
+                  data-umap-expert={p.expert_id}
                   onMouseMove={(e) => {
                     const rect = e.currentTarget.ownerSVGElement!.getBoundingClientRect();
                     setHover({
@@ -172,7 +179,7 @@ export function ClusterPlot({ umap, activeCategories }: ClusterPlotProps) {
                 <circle
                   cx={p.px}
                   cy={p.py}
-                  r={4.4}
+                  r={DOT_R}
                   fill="var(--color-muted)"
                   opacity={IDLE_OPACITY}
                   stroke="var(--color-paper)"
@@ -184,7 +191,7 @@ export function ClusterPlot({ umap, activeCategories }: ClusterPlotProps) {
                   data-role="overlay"
                   cx={p.px}
                   cy={p.py}
-                  r={4.4}
+                  r={DOT_R}
                   fill={CATEGORY_PALETTE[p.dominant_category] ?? 'var(--color-muted)'}
                   opacity={isActive ? ACTIVE_OPACITY : 0}
                   stroke="var(--color-paper)"
@@ -198,7 +205,7 @@ export function ClusterPlot({ umap, activeCategories }: ClusterPlotProps) {
 
         {hover && (
           <div
-            className="pointer-events-none absolute z-20 w-60 -translate-x-1/2 -translate-y-full rounded-md bg-paper p-3 shadow-overlay-float"
+            className="pointer-events-none absolute z-20 w-64 -translate-x-1/2 -translate-y-full rounded-md bg-paper p-3 shadow-overlay-float"
             style={{ left: hover.x, top: hover.y - 10 }}
             role="tooltip"
           >
@@ -207,8 +214,36 @@ export function ClusterPlot({ umap, activeCategories }: ClusterPlotProps) {
               {String(hover.point.expert_id + 1).padStart(2, '0')}
             </p>
             <p className="mt-0.5 font-body text-sm text-ink">
-              Leans <span className="font-semibold">{hover.point.dominant_category.replace(/_/g, ' ')}</span>
+              Leans{' '}
+              <span
+                className="font-bold"
+                style={{ color: CATEGORY_PALETTE[hover.point.dominant_category] }}
+              >
+                {CATEGORY_LABELS[hover.point.dominant_category] ??
+                  hover.point.dominant_category.replace(/_/g, ' ')}
+              </span>
             </p>
+            {/* The 6-number vector this dot was projected from, in the categories' fixed order, each
+                value in its category's colour (so no names needed); the dominant one — the dot's
+                own colour — is bold. */}
+            <div className="mt-2">
+              <p className="font-label text-[0.65rem] uppercase tracking-wide text-muted">
+                Activation rate
+              </p>
+              <p className="mt-1 flex flex-nowrap justify-between gap-x-1.5 font-label text-[0.7rem]">
+                {Object.keys(CATEGORY_PALETTE)
+                  .filter((c) => c in hover.point.activation_rate)
+                  .map((c) => (
+                    <span
+                      key={c}
+                      className={c === hover.point.dominant_category ? 'font-bold' : ''}
+                      style={{ color: CATEGORY_PALETTE[c] }}
+                    >
+                      {(hover.point.activation_rate[c] * 100).toFixed(1)}%
+                    </span>
+                  ))}
+              </p>
+            </div>
             {hover.point.top_tokens.length > 0 && (
               <div className="mt-2">
                 <p className="font-label text-[0.65rem] uppercase tracking-wide text-muted">

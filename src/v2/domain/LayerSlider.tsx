@@ -3,12 +3,12 @@ interface LayerSliderProps {
   numLayers: number;
   /** First layer that routes between experts — 1 for DeepSeek, whose layer 0 is a dense FFN.
    *  Below this the per-expert arrays are all zeros and every view would show fabricated
-   *  structure, so the slider simply can't reach them. */
+   *  structure, so the ‹ button simply stops there instead of stepping into it. */
   minLayer?: number;
-  /** Element id for the range input, so the two live instances (the sub-tab's control row and
-   *  AllCategoriesModal's header, both mounted while that window is open) don't collide — a
-   *  duplicate id silently points the second `<label htmlFor>` at the first input. */
-  id?: string;
+  /** How many leading layers are dense in the *main* model — the only thing the explanatory note
+   *  is about. Separate from `minLayer`, which also rises when a comparison column (DeepSeek) is
+   *  added to a model with no dense layers; the note must not appear then. 0 = no note. */
+  denseLayers?: number;
   onChange: (layer: number) => void;
 }
 
@@ -16,51 +16,51 @@ interface LayerSliderProps {
  * The layer control for the "Experts activation rates per layer" sub-tab. It sits outside that sub-tab's
  * heat-grid/histogram toggle so flipping the view compares the same layer rather than resetting
  * it, and it holds its layer for the Top-experts sub-tab to jump to.
+ *
+ * A ‹ / › pair either side of the readout, not a `<input type="range">` or a button-per-layer row:
+ * reuses `.flow-nav-btn`, the exact pager the Model Architecture tab already steps through its
+ * transformer blocks with (see archExplorer.ts's "‹ Transformer Block N of L ›"), so the two
+ * layer-at-a-time controls in the app look and behave the same way.
  */
 export function LayerSlider({
   layer,
   numLayers,
   minLayer = 0,
-  id = 'domain-layer-slider',
+  denseLayers = 0,
   onChange,
 }: LayerSliderProps) {
   return (
-    // Track and footnote sit side by side on one 32px band, so this control is exactly as tall as
-    // the category pills next to it on every model — stacking the footnote underneath used to make
-    // DeepSeek and JetMoE (which have a dense first layer to explain) push the whole control row,
-    // and everything below it, down. It stays in flow rather than being absolutely positioned:
-    // out of flow it would print over the sub-tab's hint paragraph or the "open all" link.
-    <div className="flex min-h-8 flex-wrap items-center gap-x-3 gap-y-1">
-      {/* One 32px row — label, track, readout — so the control occupies exactly the height of the
-          category pills and the view switch it shares a row with (both are 32px; see
-          `.view-switch-label` in moe.css). Stacking the label above the track made this the one
-          control in the row that overhung the band. `w-80` is a definite width on purpose: as a
-          flex item inside a flex item, a percentage one resolves circularly. */}
-      <div className="flex h-8 w-80 max-w-full items-center gap-2">
-        <label htmlFor={id} className="font-label text-xs text-muted">
-          Layer
-        </label>
-        <input
-          id={id}
-          type="range"
-          min={minLayer}
-          max={numLayers - 1}
-          value={layer}
-          onChange={(e) => onChange(Number(e.target.value))}
-          className="min-w-0 flex-1"
-          style={{ accentColor: 'var(--color-amber-signal)' }}
-        />
-        <span className="font-label whitespace-nowrap text-xs text-ink">
-          {layer + 1} <span className="text-muted">/ {numLayers}</span>
-        </span>
-      </div>
-      {minLayer > 0 && (
-        // One line, no wrapping: it rides the same band as the track, so a second line would put
-        // the height back. The old trailing "(no experts to route)." was dropped when this moved
-        // beside the track — the row it now shares with the pills and the "open all" link has no
-        // 130px to spare, and "dense" carries the point on its own.
-        <p className="whitespace-nowrap font-label text-[0.65rem] text-muted" title="Dense layers route every token through one shared FFN, so there are no per-expert rates to show.">
-          {minLayer > 1 ? `Layers 1–${minLayer} are dense FFNs` : 'Layer 1 is a dense FFN'}
+    <div className="layer-bar" style={{ margin: 0 }}>
+      <span className="label">Layer</span>
+      <button
+        type="button"
+        className="flow-nav-btn"
+        aria-label="Previous layer"
+        disabled={layer <= minLayer}
+        onClick={() => onChange(layer - 1)}
+      >
+        ‹
+      </button>
+      <span className="font-label whitespace-nowrap text-xs text-ink">
+        {layer + 1} <span className="text-muted">/ {numLayers}</span>
+      </span>
+      <button
+        type="button"
+        className="flow-nav-btn"
+        aria-label="Next layer"
+        disabled={layer >= numLayers - 1}
+        onClick={() => onChange(layer + 1)}
+      >
+        ›
+      </button>
+      {denseLayers > 0 && (
+        <p
+          className="max-w-md font-label text-[0.7rem] font-bold leading-snug text-ink"
+          title="Dense layers route every token through one shared feed-forward network, so there are no per-expert rates to show."
+        >
+          {denseLayers > 1
+            ? `Layers 1–${denseLayers} are dense feed-forward layers: no experts, so the pager starts at layer ${denseLayers + 1}.`
+            : 'Layer 1 is a dense feed-forward layer: no expert section, so the pager starts at layer 2.'}
         </p>
       )}
     </div>

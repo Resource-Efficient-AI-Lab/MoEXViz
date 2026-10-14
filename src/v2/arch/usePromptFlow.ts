@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ArchPromptsFile, PromptFlow } from './types';
 import { archModel, type ArchModelKey } from './models';
 
@@ -127,5 +127,11 @@ export function usePromptFlow(modelKey: ArchModelKey, promptIndex: number): UseP
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [model.dataPath, wholeFile, promptIndex, splitFlow]);
 
-  return { manifest, flow, loading: manifestLoading || promptLoading, error };
+  // Keep the architecture visible while a different model loads, too. The guide disables
+  // Next until the new trace arrives, then reboots against that trace.
+  const previousFlow = useRef<PromptFlow | null>(null);
+  useEffect(() => {
+    if (flow) previousFlow.current = flow;
+  }, [flow]);
+  return { manifest, flow: flow ?? previousFlow.current, loading: manifestLoading || promptLoading, error };
 }

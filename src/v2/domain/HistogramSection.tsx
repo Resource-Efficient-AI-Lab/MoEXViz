@@ -1,17 +1,19 @@
 import { useMemo, useState } from 'react';
 import { CATEGORY_LABELS } from '../../data/categories';
-import { CATEGORY_PALETTE } from '../../components/ClusterPlot/categoryPalette';
+import { CATEGORY_HUES, CATEGORY_PALETTE } from '../../components/ClusterPlot/categoryPalette';
+import { heatColor } from '../../components/SpecializationView/heatColor';
 import type { DomainSpecializationData } from '../../data/types';
 
 /** Card gap, as a number rather than a `gap-4` class: `fitHistogramCards` solves a layout that
  *  includes it, and a Tailwind class it cannot read is a constant waiting to drift. */
-export const CARD_GAP = 16;
+export const CARD_GAP = 10;
 
 /** Below this a 64-bar chart is a smear, so a box too short to fit is left to scroll instead. */
 const MIN_CARD_W = 240;
 
 const CHART_PAD_X = 8; // padL + padR, in viewBox units
-const CHART_H = 98; // chart + the x-axis tick row and its title
+const CHART_H = 62; // plot + the x-axis number row (was 98 incl. an axis title; shorter, so
+// several categories' charts are on screen at once)
 
 // Both the viewBox width and the card's max width scale with the expert count, which is what
 // keeps an 8-expert router from looking like a different chart. A fixed 640-unit viewBox gave
@@ -86,13 +88,17 @@ interface HistogramSectionProps {
   /** Fit-to-box override from `fitHistogramCards`. Absent in the tab, where the page scrolls and
    *  a chart wants its natural width; set by AllCategoriesModal, which has a fixed box to fill. */
   fit?: { cardWidth: number; columns: number };
+  /** One of several side-by-side model columns: charts share one fixed geometry whatever the
+   *  expert count (so models line up at the same height), carry a taller plot, sparser but larger
+   *  axis numbers, and no repeated hint — the shared one above the columns covers it. */
+  compact?: boolean;
 }
 
 /**
  * Sub-tab 3 ("Experts activation rates per layer"), Histogram view — one bar chart per toggled category at
  * the shared layer (one bar per expert), ported from the prototype's buildHistCharts. Bars are
  * clickable (opens DomainCellModal); its sibling ExpertGridSection draws the same numbers as heat
- * tiles and is hover-only.
+ * tiles and is clickable the same way.
  */
 export function HistogramSection({
   data,
@@ -101,6 +107,7 @@ export function HistogramSection({
   onBarClick,
   hideHint = false,
   fit,
+  compact = false,
 }: HistogramSectionProps) {
   const categories = useMemo(
     () => data.domains.filter((c) => activeCategories.has(c)),
@@ -109,10 +116,10 @@ export function HistogramSection({
 
   return (
     <div>
-      {!hideHint && (
+      {!hideHint && !compact && (
         <p className="math-hint" style={{ margin: '0 0 8px' }}>
-          Every one of the {data.num_experts} experts' activation rate at layer {layer + 1}, for
-          each toggled category. Click a bar for the exact numbers behind it.
+          Activation rate of all {data.num_experts} experts at layer {layer + 1}, per category.
+          Click a bar for the numbers.
         </p>
       )}
 
@@ -120,7 +127,7 @@ export function HistogramSection({
           exactly as before, while JetMoE's narrow cards flow side by side instead of stacking
           into a tall ribbon of mostly-empty rows. */}
       <div
-        className={`flex flex-wrap items-start${hideHint ? '' : ' mt-4'}${fit ? ' mx-auto' : ''}`}
+        className={`flex flex-wrap items-start${hideHint || compact ? '' : ' mt-4'}${fit ? ' mx-auto' : ''}`}
         style={{
           gap: CARD_GAP,
           // Cap the row so it breaks after exactly `columns` — see ExpertGridSection for why the
@@ -137,6 +144,7 @@ export function HistogramSection({
             rates={data.activation_rate[category][layer]}
             onBarClick={(expert) => onBarClick(category, expert)}
             cardWidth={fit?.cardWidth}
+            compact={compact}
           />
         ))}
       </div>
@@ -150,11 +158,13 @@ interface HistogramChartProps {
   onBarClick?: (expert: number) => void;
   /** Overrides the natural width cap when the caller is fitting cards into a fixed box. */
   cardWidth?: number;
+  compact?: boolean;
 }
 
-function HistogramChart({ category, rates, onBarClick, cardWidth }: HistogramChartProps) {
+function HistogramChart({ category, rates, onBarClick, cardWidth, compact = false }: HistogramChartProps) {
   const [hover, setHover] = useState<number | null>(null);
   const color = CATEGORY_PALETTE[category] ?? 'var(--color-muted)';
+  const hue = CATEGORY_HUES[category] ?? 0;
   const label = CATEGORY_LABELS[category] ?? category;
 
   const n = rates.length;
@@ -162,21 +172,24 @@ function HistogramChart({ category, rates, onBarClick, cardWidth }: HistogramCha
   const padR = 4;
   const padT = 4;
   const gap = 0.6;
-  const chartH = 64;
+  const chartH = compact ? 62 : 44;
   const axisY = padT + chartH;
-  const H = CHART_H;
+  const H = compact ? padT + chartH + 18 : CHART_H;
+  // Everything text-sized below scales with this, since the compact viewBox is narrower (480 vs
+  // 640+) and so is drawn larger on screen per unit.
+  const u = compact ? 1.5 : 1;
 
-  const W = chartUnitsWide(n);
+  const W = compact ? 480 : chartUnitsWide(n);
   // The fit-to-box width when this is the all-categories window, the natural cap otherwise.
-  const maxWidth = cardWidth ?? chartMaxWidth(n);
+  const maxWidth = compact ? undefined : (cardWidth ?? chartMaxWidth(n));
 
   const barW = (W - padL - padR) / n - gap;
   const barX = (e: number) => padL + e * (barW + gap);
   const barH = (rate: number) => Math.max(rate * chartH, 1);
 
-  // Every expert gets a tick when there are few; 64 would be an unreadable smear, so those step
-  // by 8. Labels are 1-based ("Expert No." reads as a count, not an array index).
-  const tickStep = n <= 16 ? 1 : 8;
+  // Every expert is labelled (1-based, zero-padded like the heatmap tiles) — at ~10 units per bar
+  // a 2-digit label at this size fits under each one.
+  const tickStep = compact && n > 16 ? 8 : 1;
   const ticks = Array.from({ length: n }, (_, e) => e).filter((e) => e % tickStep === 0);
 
   // width:100% alongside the cap, not the cap alone: as a flex item the card would otherwise
@@ -185,12 +198,15 @@ function HistogramChart({ category, rates, onBarClick, cardWidth }: HistogramCha
   return (
     <div
       data-hist-card
-      className="rounded-md border border-ink/10 bg-paper p-2.5"
+      data-category-chart={category}
+      className="rounded-md border border-ink/10 bg-paper p-2"
       style={{ width: '100%', maxWidth }}
     >
-      <div className="mb-1.5 flex items-center gap-2">
+      <div className="mb-1 flex items-center gap-2">
         <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: color }} />
-        <span className="font-body text-sm font-semibold text-ink">{label}</span>
+        <span className="font-body text-sm font-semibold text-ink">
+          {compact ? label : `${label} · ${n} experts, layer activation rate`}
+        </span>
       </div>
       <svg
         viewBox={`0 0 ${W} ${H}`}
@@ -206,19 +222,23 @@ function HistogramChart({ category, rates, onBarClick, cardWidth }: HistogramCha
             x2={W - padR}
             y1={padT + chartH - (pct / 100) * chartH}
             y2={padT + chartH - (pct / 100) * chartH}
-            stroke="var(--color-surface)"
+            stroke="var(--color-ink)"
+            strokeOpacity={0.07}
             strokeWidth={1}
           />
         ))}
         {rates.map((rate, e) => (
           <rect
             key={e}
+            data-expert-num={e}
             x={barX(e)}
             y={padT + chartH - barH(rate)}
             width={barW}
             height={barH(rate)}
-            fill={color}
-            opacity={0.15 + rate * 0.85}
+            fill={heatColor(rate, hue)}
+            stroke="var(--color-ink)"
+            strokeOpacity={0.12}
+            strokeWidth={0.4}
             style={onBarClick ? { cursor: 'pointer' } : undefined}
             onMouseMove={() => setHover(e)}
             onClick={() => onBarClick?.(e)}
@@ -238,36 +258,51 @@ function HistogramChart({ category, rates, onBarClick, cardWidth }: HistogramCha
           <text
             key={e}
             x={barX(e) + barW / 2}
-            y={axisY + 9}
+            y={axisY + 9 * u}
             textAnchor="middle"
             className="font-label"
-            fontSize={7}
-            fill="var(--color-muted)"
+            fontSize={5.5 * u}
+            fontWeight={700}
+            fill="var(--color-ink)"
           >
-            {e + 1}
+            {String(e + 1).padStart(2, '0')}
           </text>
         ))}
-        <text
-          x={padL + (W - padL - padR) / 2}
-          y={H - 4}
-          textAnchor="middle"
-          className="font-label"
-          fontSize={7.5}
-          fill="var(--color-muted)"
-        >
-          Expert No.
-        </text>
+        {/* Floating label on the hovered bar itself, not only the readout under the chart. */}
+        {hover !== null && (() => {
+          const text = `Expert ${hover + 1} · ${(rates[hover] * 100).toFixed(1)}%`;
+          const w = (text.length * 3.9 + 8) * u;
+          const cx = barX(hover) + barW / 2;
+          const x = Math.min(Math.max(cx - w / 2, padL), W - padR - w);
+          const top = padT + chartH - barH(rates[hover]);
+          const y = Math.max(top - 13 * u, 0);
+          return (
+            <g pointerEvents="none">
+              <rect
+                x={x}
+                y={y}
+                width={w}
+                height={11 * u}
+                rx={3}
+                fill="#fff"
+                stroke="var(--color-ink)"
+                strokeOpacity={0.35}
+                strokeWidth={0.5}
+              />
+              <text
+                x={x + w / 2}
+                y={y + 7.7 * u}
+                textAnchor="middle"
+                className="font-label"
+                fontSize={6.5 * u}
+                fill="#000"
+              >
+                {text}
+              </text>
+            </g>
+          );
+        })()}
       </svg>
-      {/* `truncate` (nowrap + ellipsis) is load-bearing under the fit, not cosmetic: the hover
-          string is ~386px wide, so a fitted card narrower than that would wrap it to a second line
-          on hover — six cards each growing a line is enough to hand back the scrollbar the fit just
-          removed, at the exact moment the reader is using the chart. Reserving the second line
-          instead would cost that height on every card at every size. */}
-      <p className="mt-1 truncate font-label text-xs text-muted">
-        {hover !== null
-          ? `expert #${hover + 1} · ${(rates[hover] * 100).toFixed(1)}%${onBarClick ? ' · click for details' : ''}`
-          : `${n} experts, layer activation rate`}
-      </p>
     </div>
   );
 }

@@ -29,6 +29,17 @@ export const CATEGORY_HUES: Record<string, number> = {
   conversational: 300, // purple
 };
 
+/** Plain English for each hue above — for prose that names a category's color (e.g. "colored
+ *  purple") rather than just rendering a swatch, where the reader can't just look at the hue. */
+export const CATEGORY_COLOR_NAMES: Record<string, string> = {
+  code: 'blue',
+  math: 'yellow',
+  biomedical: 'green',
+  legal: 'red',
+  creative_writing: 'orange',
+  conversational: 'purple',
+};
+
 export const CATEGORY_PALETTE: Record<string, string> = {
   code: 'oklch(0.56 0.19 266)',
   math: 'oklch(0.80 0.17 95)',
