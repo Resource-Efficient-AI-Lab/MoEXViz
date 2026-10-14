@@ -10,6 +10,7 @@ import { DEFAULT_MODEL_KEY, type ArchModelKey } from './arch/models';
 import { DomainTab } from './domain/DomainTab';
 import { DomainModelPicker } from './domain/DomainModelPicker';
 import { DEFAULT_DOMAIN_MODEL_KEY, type DomainModelKey } from './domain/models';
+import { ProjectLinks } from './ProjectLinks';
 
 type TopTab = 'explorer' | 'domain';
 
@@ -67,42 +68,47 @@ export function MoeApp() {
           </h1>
         </header>
 
-        {tab === 'explorer' && (
-          <ArchPromptPicker
-            manifest={manifest}
-            modelKey={archModelKey}
-            promptIndex={promptIndex}
-            loading={loading}
-            onModelChange={setArchModelKey}
-            onPromptChange={setPromptIndex}
-          />
-        )}
+        <div className="app-toolbar full-bleed">
+          <div className="app-toolbar-main">
+            {tab === 'explorer' && (
+              <ArchPromptPicker
+                manifest={manifest}
+                modelKey={archModelKey}
+                promptIndex={promptIndex}
+                loading={loading}
+                onModelChange={setArchModelKey}
+                onPromptChange={setPromptIndex}
+              />
+            )}
 
-        {tab === 'domain' && (
-          <DomainModelPicker
-            modelKey={domainModelKey}
-            onModelChange={changeDomainModel}
-            compareKeys={domainCompareKeys}
-            onToggleCompare={toggleDomainCompare}
-            blockedKeys={domainBlockedKeys}
-          />
-        )}
+            {tab === 'domain' && (
+              <DomainModelPicker
+                modelKey={domainModelKey}
+                onModelChange={changeDomainModel}
+                compareKeys={domainCompareKeys}
+                onToggleCompare={toggleDomainCompare}
+                blockedKeys={domainBlockedKeys}
+              />
+            )}
 
-        <div className="top-tabs">
-          <button
-            className={`top-tab${tab === 'explorer' ? ' active' : ''}`}
-            type="button"
-            onClick={() => setTab('explorer')}
-          >
-            Model Architecture
-          </button>
-          <button
-            className={`top-tab${tab === 'domain' ? ' active' : ''}`}
-            type="button"
-            onClick={() => setTab('domain')}
-          >
-            Domain Specialization Analysis
-          </button>
+            <div className="top-tabs">
+              <button
+                className={`top-tab${tab === 'explorer' ? ' active' : ''}`}
+                type="button"
+                onClick={() => setTab('explorer')}
+              >
+                Model Architecture
+              </button>
+              <button
+                className={`top-tab${tab === 'domain' ? ' active' : ''}`}
+                type="button"
+                onClick={() => setTab('domain')}
+              >
+                Domain Specialization Analysis
+              </button>
+            </div>
+          </div>
+          <ProjectLinks />
         </div>
 
         <ArchitectureTab
