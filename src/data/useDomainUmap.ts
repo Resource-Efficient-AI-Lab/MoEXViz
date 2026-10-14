@@ -22,6 +22,7 @@ interface RawUmapPoint {
   x: number;
   y: number;
   dominant_domain: string;
+  domain_activation_rate: Record<string, number>;
   top_tokens: RawUmapTopToken[];
 }
 interface RawUmapData {
@@ -38,6 +39,7 @@ function toUmapPoint(raw: RawUmapPoint): UmapPoint {
     x: raw.x,
     y: raw.y,
     dominant_category: raw.dominant_domain,
+    activation_rate: raw.domain_activation_rate,
     top_tokens: raw.top_tokens.map(
       (t): UmapTopToken => ({ token: t.token, score: t.score, category: t.domain })
     ),
@@ -53,11 +55,13 @@ interface Loaded {
   error: Error | null;
 }
 
-export function useDomainUmap(modelKey: DomainModelKey): UseDomainUmapResult {
-  const umapPath = domainModel(modelKey).umapPath;
+/** `null` is "don't fetch" — see useDomainSpecialization. */
+export function useDomainUmap(modelKey: DomainModelKey | null): UseDomainUmapResult {
+  const umapPath = modelKey ? domainModel(modelKey).umapPath : null;
   const [loaded, setLoaded] = useState<Loaded>({ data: null, error: null });
 
   useEffect(() => {
+    if (!umapPath) return;
     let cancelled = false;
 
     fetch(`${import.meta.env.BASE_URL}data/${umapPath}`)
@@ -99,5 +103,5 @@ export function useDomainUmap(modelKey: DomainModelKey): UseDomainUmapResult {
   const data = fresh ? loaded.data : null;
   const error = fresh ? loaded.error : null;
 
-  return { data, loading: !data && !error, error };
+  return { data, loading: !!umapPath && !data && !error, error };
 }

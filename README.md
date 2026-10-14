@@ -16,8 +16,9 @@ matrix, weight and expert selection you see is what the model actually did.
 ### Quick start
 
 1. Pick a **model** and a **prompt** from the dropdowns at the top.
-2. Click **Start tour** for a guided walkthrough of one transformer layer, then use
-   **‹ Back** / **Next ›** / **Finish**.
+2. The guided walkthrough starts automatically in the bottom-right card. Use
+   **Back** / **Next**, then **Restart tour** at the last step.
+   Parameter count stays alongside the guide; the cards stack on narrow screens.
 3. Or explore freely: hover a block in the flow row to see what opens, click it for the full math.
 4. Switch to **Domain Specialization Analysis** to see which experts specialize in which kind of
    text.

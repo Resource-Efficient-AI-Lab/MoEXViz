@@ -183,10 +183,11 @@ export function buildMaskGridHTML(tokLabel: TokLabel, n: number, cellPx: number)
  *  modals instead of overflowing; the legend dropped "unhatched cells in the mask are 0" (the mask
  *  prints its 0 glyphs) and folds the two hover targets into one clause. */
 export const mapFootnote = (prose: string) =>
-  '<p class="math-hint" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:6px 0 0;">' +
-  '<span>' + prose + '</span>' +
+  '<div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:6px 0 0;">' +
+  '<p class="math-hint" style="margin:0">' + prose + '</p>' +
+  '<span class="diagram-legend" style="display:contents">' +
   '<span style="display:inline-block;width:15px;height:15px;border:1px solid var(--border);border-radius:3px;background:' + HATCH_BG + ';flex:0 0 auto;"></span>' +
-  '<span>hatched = masked (causal, M = −∞); hover a cell for its exact value.</span></p>';
+  '<span>hatched = masked (causal, M = −∞); hover a cell for its exact value.</span></span></div>';
 // 16 per-head slices side by side: what "concatenate the heads" actually produces. Each head keeps
 // its own ramp normalization (as everywhere else in this modal), so a quiet head stays legible.
 export function buildHeadStripHTML(ramp: Ramp, heads: number[][][], cellPx: number) {

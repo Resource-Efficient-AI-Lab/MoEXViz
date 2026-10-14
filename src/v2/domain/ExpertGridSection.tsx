@@ -65,6 +65,8 @@ interface ExpertGridSectionProps {
   data: DomainSpecializationData;
   activeCategories: Set<string>;
   layer: number;
+  /** Opens DomainCellModal for a clicked cell — same pop-up the Histogram view's bars open. */
+  onCellClick: (category: string, expert: number) => void;
   /** Set by AllCategoriesModal, which writes its own one-liner: this one talks about toggling
    *  category pills, and there are none in that window. */
   hideHint?: boolean;
@@ -77,12 +79,14 @@ interface ExpertGridSectionProps {
  * Sub-tab 3 ("Experts activation rates per layer"), Heatmap grid view and its default — one ExpertGrid tile
  * per toggled category (up to 6) at the shared layer, generalized from the old Compare section's
  * fixed A/B pair. Was a sub-tab of its own until 2026-07-28, mislabelled "UMAP Expert Grid"
- * (the UMAP is sub-tab 1). Cells are hover-only, unlike the Histogram view's clickable bars.
+ * (the UMAP is sub-tab 1). Cells are both hover (quick tooltip) and click (the full
+ * DomainCellModal), same as the Histogram view's bars.
  */
 export function ExpertGridSection({
   data,
   activeCategories,
   layer,
+  onCellClick,
   hideHint = false,
   fit,
 }: ExpertGridSectionProps) {
@@ -96,9 +100,9 @@ export function ExpertGridSection({
     <div>
       {!hideHint && (
         <p className="math-hint" style={{ margin: '0 0 8px' }}>
-          Each grid is one category's {data.num_experts} experts at layer {layer + 1}. Color shows
-          how often that category's tokens routed to each expert, rings mark its{' '}
-          {data.top_k_experts} most-used.
+          One grid per category: {data.num_experts} experts at layer {layer + 1}, darker = more of
+          that category's tokens routed there; rings mark the {data.top_k_experts} most-used. Click
+          a cell for the numbers.
         </p>
       )}
 
@@ -124,7 +128,12 @@ export function ExpertGridSection({
           const label = CATEGORY_LABELS[category] ?? category;
 
           return (
-            <figure key={category} className="max-w-full" style={{ width: tileWidth }}>
+            <figure
+              key={category}
+              data-category-tile={category}
+              className="max-w-full"
+              style={{ width: tileWidth }}
+            >
               <figcaption className="mb-2 flex items-center gap-2">
                 <span
                   className="inline-block h-3 w-3 rounded-sm"
@@ -139,6 +148,7 @@ export function ExpertGridSection({
                 freqs={freqs}
                 topSet={topSet}
                 sampleTokensFor={(expert) => tokensForExpert(data, category, layer, expert)}
+                onCellClick={(expert) => onCellClick(category, expert)}
               />
             </figure>
           );

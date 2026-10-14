@@ -6,9 +6,10 @@ import {
 } from './archExplorer';
 import { PerTokenRouting } from './PerTokenRouting';
 import { buildOuterFlowBlocks, flowBlockInnerHtml, type FlowBlockContent } from './flowBlocks';
-import { DENSE_FFN_TEXT, pickNarration } from './narration';
+import { buildTutorial, feedForwardOverview, supportsTutorialView, tutorialViewMatches, visibleGuideProse, type TutorialPhase, type TutorialStep, type TutorialView } from './tutorial';
 import { buildParamCountPanelHtml } from './paramPanel';
 import type { PromptFlow } from './types';
+import type { ArchModelKey } from './models';
 
 /** The same union archExplorer takes as its height-regime argument — aliased rather than restated
  *  so the two can never drift into disagreeing about the sub-tab names. */
@@ -75,6 +76,8 @@ interface MathStage {
 
 interface ArchitectureTabProps {
   visible: boolean;
+  modelKey: ArchModelKey;
+  loading: boolean;
   /** The selected prompt's data, and its index — both owned by MoeApp, which renders the Model +
    *  Prompt dropdowns above the top-tab bar. Null while the first prompt is still loading. */
   flow: PromptFlow | null;
@@ -95,12 +98,28 @@ interface ArchitectureTabProps {
  * Specialization, so the explorer's state — current layer, isolated token, open tour — survives
  * a round trip, exactly like the prototype's tab switching.
  */
-export function ArchitectureTab({ visible, flow, promptIndex, error, onDomainChange }: ArchitectureTabProps) {
+export function ArchitectureTab({ visible, modelKey, loading, flow, promptIndex, error, onDomainChange }: ArchitectureTabProps) {
   // Router modal state — React owns the shared current layer (single source of truth for both the
   // Per-token routing fan and, via the exposed setLayer, the imperative All-tokens heatmap).
   const [currentLayer, setCurrentLayer] = useState(0);
   const [routerSubTab, setRouterSubTab] = useState<RouterSubTab>('per-token');
   const archApiRef = useRef<ArchExplorerApi | null>(null);
+  const [routerVisible, setRouterVisible] = useState(false);
+  const [selectedToken, setSelectedToken] = useState(0);
+  const tutorialSteps = useMemo(() => flow ? buildTutorial(flow) : [], [flow]);
+  // Commands and callbacks share this synchronous session. React renders its public state;
+  // imperative listeners can report several changes in one event before the next React render.
+  const session = useRef({
+    active: false, navigating: false, step: 0, layer: 0, token: 0,
+    routerOpen: false, routerTab: 'per-token' as RouterSubTab,
+    mathOpen: false, view: null as TutorialView | null,
+    flow: null as PromptFlow | null, steps: [] as TutorialStep[],
+    modelKey: null as ArchModelKey | null,
+    phaseLayers: { initial: 0, routed: 0, final: 0 } as Record<TutorialPhase, number>,
+  });
+  const architectureRef = useRef<HTMLDivElement>(null);
+  const dockRef = useRef<HTMLDivElement>(null);
+  const [guideProse, setGuideProse] = useState({ __html: '' });
   // The Per-token tab's beat replay, published upward so ▶ Replay routing can live in the shared
   // layer row next to its All-tokens twin. Null = nothing to replay (reduced motion / dense layer).
   // Wrapped in the updater form: a bare setState(fn) would be read as a state updater.
@@ -120,19 +139,73 @@ export function ArchitectureTab({ visible, flow, promptIndex, error, onDomainCha
   // toggle, i.e. before the browser paints the modal at all. Safe here: the caller is a native
   // DOM listener, never a render or a lifecycle.
   const [routerOpenNonce, setRouterOpenNonce] = useState(0);
-  const handleRouterOpen = useCallback(
-    () => flushSync(() => setRouterOpenNonce((n) => n + 1)),
-    [],
-  );
 
-  // ---- guided tour: React owns whether it is running and which step ----
-  const [tourOpen, setTourOpen] = useState(false);
+  // ---- persistent guided tour: React owns the current step ----
   const [tourStep, setTourStep] = useState(0);
+  const [tourExpanded, setTourExpanded] = useState(false);
 
   // ---- the shared math modal: React owns whether it is open and which stage is showing ----
   // The stage's CONTENT is still built by archExplorer's string builders; React only commits it.
   const [mathStage, setMathStage] = useState<MathStage | null>(null);
   const stageSeq = useRef(0);
+
+  const syncGuide = useCallback((view: TutorialView) => {
+    const s = session.current;
+    s.view = view;
+    if (!s.active || s.navigating) return;
+    const index = s.steps.findIndex((step) => tutorialViewMatches(step.view, view));
+    if (index < 0) return;
+    s.step = index;
+    setTourStep(index);
+    archApiRef.current?.highlightTourBlock(s.steps[index].block);
+  }, []);
+
+  const handleRouterOpen = useCallback(() => {
+    const s = session.current;
+    s.routerOpen = true;
+    if (!s.navigating) s.routerTab = 'per-token';
+    flushSync(() => {
+      setRouterVisible(true);
+      setRouterSubTab(s.routerTab);
+      setRouterOpenNonce((n) => n + 1);
+    });
+    if (!s.navigating) {
+      archApiRef.current?.killAttnTimeline();
+      archApiRef.current?.clearMathSelection();
+      setMathStage(null);
+      s.mathOpen = false;
+      setGuideProse({ __html: '' });
+      syncGuide({ kind: 'router', tab: s.routerTab });
+    }
+  }, [syncGuide]);
+
+  const handleRouterClose = useCallback(() => {
+    const s = session.current;
+    s.routerOpen = false;
+    setRouterVisible(false);
+    if (!s.active || s.navigating || !s.flow) return;
+    s.mathOpen = false;
+    s.view = null;
+    archApiRef.current?.killAttnTimeline();
+    archApiRef.current?.clearMathSelection();
+    setMathStage(null);
+    const index = feedForwardOverview(s.steps, s.flow, s.layer);
+    s.step = index;
+    setTourStep(index);
+    setGuideProse({ __html: '' });
+    archApiRef.current?.highlightTourBlock(5);
+  }, []);
+
+  const handleStageTabChange = useCallback((view: TutorialView) => {
+    syncGuide(view);
+    if (session.current.active) setGuideProse({ __html: visibleGuideProse(document.getElementById('math-content')!) });
+  }, [syncGuide]);
+
+  const handleTokenChange = useCallback((token: number) => {
+    session.current.token = token;
+    setSelectedToken(token);
+    archApiRef.current?.setToken(token);
+  }, []);
 
   /** Every internal opener (block clicks, token chips, the head ‹ ›, a routing-grid cell) lands
    *  here. The build already happened inside archExplorer's event handler — deliberately, since
@@ -144,39 +217,76 @@ export function ArchitectureTab({ visible, flow, promptIndex, error, onDomainCha
     // immediately before the innerHTML swap.
     archApiRef.current?.killAttnTimeline();
     stageSeq.current += 1;
+    setGuideProse({ __html: '' });
     setMathStage({ seq: stageSeq.current, kind: stage.kind, payload: stage.payload });
-  }, []);
+    const s = session.current;
+    s.mathOpen = true;
+    if (stage.kind === 'cell') {
+      s.token = stage.token;
+      setSelectedToken(stage.token);
+      syncGuide({ kind: 'expert', tab: stage.tab });
+    } else {
+      if (s.active && s.routerOpen) {
+        const navigating = s.navigating;
+        s.navigating = true;
+        archApiRef.current?.closeRouterModal();
+        s.navigating = navigating;
+      }
+      syncGuide({ kind: 'stage', stageKey: stage.stageKey, tab: stage.attnTab });
+    }
+  }, [syncGuide]);
 
   const closeMathModal = useCallback(() => {
     archApiRef.current?.killAttnTimeline();
     archApiRef.current?.hideTip();
+    archApiRef.current?.clearMathSelection();
     setMathStage(null);
-  }, []);
+    const s = session.current;
+    s.mathOpen = false;
+    setGuideProse({ __html: '' });
+    if (!s.active || s.navigating) { s.view = null; return; }
+    if (s.view?.kind === 'expert' && s.routerOpen) {
+      syncGuide({ kind: 'router', tab: s.routerTab });
+      return;
+    }
+    const block = s.steps[s.step]?.block;
+    const index = block === 5 && s.flow
+      ? feedForwardOverview(s.steps, s.flow, s.layer)
+      : s.steps.findIndex((step) => step.block === block && step.view.kind === 'overview');
+    s.view = { kind: 'overview' };
+    if (index >= 0) {
+      s.step = index;
+      setTourStep(index);
+      archApiRef.current?.highlightTourBlock(s.steps[index].block);
+    }
+  }, [syncGuide]);
 
-  useEffect(() => {
-    if (!flow) return;
-    const api = bootArchExplorer(flow, {
-      onLayerChange: setCurrentLayer,
-      onOpenStage: handleOpenStage,
-      onRouterOpen: handleRouterOpen,
-    });
-    archApiRef.current = api;
-    setCurrentLayer(0); // a re-boot (prompt change) resets the explorer to layer 1
-    // …and closes the modal. archExplorer used to strip the backdrop's `open` class here; now that
-    // React owns it, a stale stage would otherwise keep rendering HTML built from the PREVIOUS
-    // prompt's closure, and its wiring would drive a dead explorer (audit M10).
-    setMathStage(null);
-    // Same reasoning for the guided tour. The old code did NOT reset it — it left the overlay
-    // visible over a freshly-booted explorer whose tour state was back at "closed", so Next
-    // advanced a card that highlighted nothing. Closing it is the sane reset, and a visible
-    // behaviour change: switching prompt or model now dismisses an open tour.
-    setTourOpen(false);
-    setTourStep(0);
-    return () => {
-      api.cleanup();
-      archApiRef.current = null;
-    };
-  }, [flow, handleOpenStage, handleRouterOpen]);
+  const handleLayerChange = useCallback((layer: number) => {
+    const s = session.current;
+    s.layer = layer;
+    setCurrentLayer(layer);
+    if (!s.active || s.navigating || !s.flow || !s.view) return;
+    const view = s.view;
+    if (view.kind === 'overview' && s.steps[s.step]?.block === 5) {
+      const index = feedForwardOverview(s.steps, s.flow, layer);
+      s.step = index;
+      setTourStep(index);
+      return;
+    }
+    if (!supportsTutorialView(s.flow, layer, view)) {
+      s.navigating = true;
+      archApiRef.current?.closeRouterModal();
+      closeMathModal();
+      s.navigating = false;
+      s.view = { kind: 'overview' };
+      const index = feedForwardOverview(s.steps, s.flow, layer);
+      s.step = index;
+      setTourStep(index);
+      archApiRef.current?.highlightTourBlock(5);
+    } else if (view.kind === 'stage') {
+      archApiRef.current?.openStage(view.stageKey, view.tab);
+    }
+  }, [closeMathModal]);
 
   // Wire the stage's controls and start its reveal, once the HTML above has committed.
   // ⚠ `mathStage` is the ONLY dependency, and that is load-bearing. ▶ Step through layers
@@ -192,6 +302,7 @@ export function ArchitectureTab({ visible, flow, promptIndex, error, onDomainCha
     if (!mathStage) return;
     const api = archApiRef.current;
     api?.mountStage();
+    if (session.current.active) setGuideProse({ __html: visibleGuideProse(document.getElementById('math-content')!) });
     return () => api?.killAttnTimeline();
   }, [mathStage]);
 
@@ -208,20 +319,183 @@ export function ArchitectureTab({ visible, flow, promptIndex, error, onDomainCha
   const bodyHtml = useMemo(() => ({ __html: mathStage ? mathStage.payload.html : '' }), [mathStage]);
   const headerHtml = useMemo(() => ({ __html: mathStage ? mathStage.payload.headerExtra : '' }), [mathStage]);
 
-  // Drive the imperative block highlight.
-  // ⚠ Deliberately NOT keyed on `currentLayer` OR on `flow`.
-  //  - currentLayer: a layer change rebuilds the flow row, and buildPdfBlocks re-applies the
-  //    highlight itself from its own mirror of this index — re-running here would fire a second
-  //    scrollIntoView per layer step.
-  //  - flow: on a re-boot this effect would run while `tourOpen`/`tourStep` still held the OLD
-  //    tour's values (the boot effect only *queues* the reset), so it would highlight a block on
-  //    the freshly-built row and start a smooth scrollIntoView that no later render can cancel.
-  //    Measured before dropping it: ~120ms of a stale highlight on every prompt/model switch made
-  //    during a tour. Dropping `flow` is safe because a fresh boot's `tourHighlight` mirror already
-  //    starts at null, and the queued `setTourOpen(false)` re-runs this effect anyway.
+  // Reserve the entire dock, including both stacked cards on narrow screens.
   useEffect(() => {
-    archApiRef.current?.highlightTourBlock(tourOpen ? tourStep : null);
-  }, [tourOpen, tourStep]);
+    const root = architectureRef.current, card = dockRef.current;
+    if (!flow || !visible || !root || !card) return;
+    const viewport = root.querySelector<HTMLElement>('.flow-viewport')!;
+    const diagram = root.querySelector<HTMLElement>('.pdf-scroll')!;
+    let frame = 0;
+    let disposed = false;
+    const fit = () => {
+      if (disposed) return;
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const dockHeight = Math.ceil(card.getBoundingClientRect().height);
+        root.style.setProperty('--tour-reserved', `${dockHeight}px`);
+        // Keep the diagram's natural layout readable, then scale the whole illustration,
+        // including the residual and loop-back lanes, into the remaining viewport.
+        const width = Math.max(1100, viewport.clientWidth);
+        diagram.style.width = `${width}px`;
+        const height = diagram.offsetHeight;
+        const top = viewport.getBoundingClientRect().top + window.scrollY;
+        const dockTop = card.getBoundingClientRect().top;
+        // Leave room for the panel's lower padding/border and a gap above the dock.
+        // Measure from the document origin so scrolling never changes the fitted size.
+        const available = Math.max(1, dockTop - top - 20);
+        const scale = Math.min(1, viewport.clientWidth / width, available / height);
+        diagram.style.transform = `scale(${scale})`;
+        diagram.style.setProperty('--flow-scale', String(scale));
+        diagram.style.left = `${Math.max(0, (viewport.clientWidth - width * scale) / 2)}px`;
+        viewport.style.height = `${Math.ceil(height * scale)}px`;
+        archApiRef.current?.refreshFlowArcs();
+        archApiRef.current?.fitGridHeight(session.current.routerTab);
+      });
+    };
+    fit();
+    const observer = new ResizeObserver(fit);
+    observer.observe(card);
+    observer.observe(viewport);
+    observer.observe(diagram);
+    // Prompt/header wrapping and font loading can move the flow without resizing it.
+    observer.observe(root.closest('.moe-wrap')!);
+    document.fonts.ready.then(fit);
+    window.addEventListener('resize', fit);
+    return () => {
+      disposed = true;
+      observer.disconnect(); cancelAnimationFrame(frame);
+      window.removeEventListener('resize', fit);
+      root.style.removeProperty('--tour-reserved');
+    };
+  }, [flow, visible]);
+
+  const navigateTutorial = useCallback((requested: number) => {
+    const s = session.current, api = archApiRef.current;
+    if (!s.active || !s.flow || !api) return;
+    const index = Math.max(0, Math.min(s.steps.length - 1, requested));
+    const step = s.steps[index], previous = s.steps[s.step];
+    s.navigating = true;
+    api.cancelViewAnimation();
+    if (step.view.kind !== 'expert') api.clearMathSelection();
+    s.mathOpen = false;
+    setMathStage(null);
+    setGuideProse({ __html: '' });
+    if (step.view.kind !== 'router' && step.view.kind !== 'expert') api.closeRouterModal();
+    // Remember manual layer choices within each part of the tutorial. Crossing into the final
+    // section is a single deck transition; Back returns to the representative block we left.
+    if (previous && previous.phase !== step.phase) {
+      s.phaseLayers[previous.phase] = s.layer;
+      const layer = step.phase === 'final' ? s.flow.num_layers - 1 : s.phaseLayers[step.phase];
+      api.setLayer(layer, true);
+    }
+    // A manual detour may have left us on a layer that cannot demonstrate this stop. Pick the
+    // nearest layer with that operation rather than opening a missing-data panel.
+    if ((step.id === 'dense' && s.flow.layers[s.layer]?.tokens) || !supportsTutorialView(s.flow, s.layer, step.view)) {
+      const layer = step.id === 'dense'
+        ? s.flow.layers.findIndex((layer) => !layer.tokens)
+        : s.flow.layers.findIndex((_, layer) => supportsTutorialView(s.flow!, layer, step.view));
+      if (layer >= 0) api.setLayer(layer, true);
+    }
+    s.step = index;
+    setTourStep(index);
+    s.view = step.view;
+    api.highlightTourBlock(step.block);
+    if (step.view.kind === 'stage') {
+      api.openStage(step.view.stageKey, step.view.tab);
+    } else if (step.view.kind === 'router') {
+      s.routerTab = step.view.tab;
+      setRouterSubTab(step.view.tab);
+      api.openRouterModal();
+    } else if (step.view.kind === 'expert') {
+      s.routerTab = 'all-tokens';
+      setRouterSubTab('all-tokens');
+      if (!s.routerOpen) api.openRouterModal();
+      api.openExpert(step.view.tab);
+    }
+    s.navigating = false;
+  }, []);
+
+  const startTutorial = useCallback(() => {
+    const s = session.current, api = archApiRef.current;
+    if (!s.flow || !api) return;
+    s.navigating = true;
+    s.active = true;
+    s.step = 0;
+    s.phaseLayers = { initial: 0, routed: Math.max(0, s.flow.layers.findIndex((layer) => !!layer.tokens)), final: s.flow.num_layers - 1 };
+    api.setTutorialActive(true);
+    api.clearMathSelection();
+    api.setLayer(0);
+    handleTokenChange(s.flow.tokens.length - 1);
+    s.navigating = false;
+    navigateTutorial(0);
+  }, [handleTokenChange, navigateTutorial]);
+
+  useEffect(() => {
+    if (!flow) return;
+    const previous = session.current;
+    const steps = buildTutorial(flow);
+    const sameModel = previous.modelKey === modelKey;
+    const previousId = previous.steps[previous.step]?.id;
+    const resume = !previous.flow ? 0 : !sameModel ? steps.findIndex((step) => step.id === 'select-sample')
+      : Math.max(0, steps.findIndex((step) => step.id === previousId));
+    const layer = sameModel ? Math.min(previous.layer, flow.num_layers - 1) : 0;
+    const token = Math.max(0, Math.min(sameModel ? previous.token : flow.tokens.length - 1, flow.tokens.length - 1));
+    // Suppress reports from initialization until the new session is ready.
+    previous.navigating = true;
+    const api = bootArchExplorer(flow, {
+      onLayerChange: handleLayerChange,
+      onOpenStage: handleOpenStage,
+      onRouterOpen: handleRouterOpen,
+      onRouterClose: handleRouterClose,
+      onStageTabChange: handleStageTabChange,
+      onTokenChange: handleTokenChange,
+    });
+    archApiRef.current = api;
+    session.current = {
+      active: true, navigating: true, step: resume, layer: 0, token,
+      routerOpen: false, routerTab: 'per-token', mathOpen: false, view: null,
+      flow, steps, modelKey,
+      phaseLayers: sameModel ? previous.phaseLayers : {
+        initial: 0, routed: Math.max(0, flow.layers.findIndex((layer) => !!layer.tokens)), final: flow.num_layers - 1,
+      },
+    };
+    setSelectedToken(token);
+    setRouterVisible(false);
+    setRouterSubTab('per-token');
+    setGuideProse({ __html: '' });
+    setMathStage(null);
+    api.setTutorialActive(true);
+    api.setLayer(layer);
+    api.setToken(token);
+    session.current.navigating = false;
+    navigateTutorial(resume);
+    return () => {
+      api.cleanup();
+      archApiRef.current = null;
+    };
+    // Rebuild only when the loaded trace changes; model selection can precede its arrival.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [flow, handleOpenStage, handleRouterOpen, handleRouterClose, handleStageTabChange, handleTokenChange, handleLayerChange, navigateTutorial]);
+
+  useEffect(() => {
+    if (session.current.flow && session.current.modelKey !== modelKey) {
+      navigateTutorial(session.current.steps.findIndex((step) => step.id === 'select-sample'));
+    }
+  }, [modelKey, navigateTutorial]);
+
+  const changeRouterTab = useCallback((tab: RouterSubTab) => {
+    session.current.routerTab = tab;
+    setRouterSubTab(tab);
+    syncGuide({ kind: 'router', tab });
+    setGuideProse({ __html: '' });
+  }, [syncGuide]);
+
+  const chooseToken = useCallback((token: number) => {
+    handleTokenChange(token);
+    const view = session.current.view;
+    if (view?.kind === 'stage') archApiRef.current?.openStage(view.stageKey, view.tab);
+    else if (view?.kind === 'expert') archApiRef.current?.openExpert(view.tab);
+  }, [handleTokenChange]);
 
   /** The row's three outer blocks (Embedding, Final RMSNorm, Final Output), built during RENDER so
    *  they are already populated when the boot effect below measures the row — the stage lock, the
@@ -248,8 +522,7 @@ export function ArchitectureTab({ visible, flow, promptIndex, error, onDomainCha
   const embedHtml = useMemo(() => ({ __html: outer ? flowBlockInnerHtml(outer.embed) : '' }), [outer]);
   const finalNormHtml = useMemo(() => ({ __html: outer ? flowBlockInnerHtml(outer.finalNorm) : '' }), [outer]);
   const finalOutputHtml = useMemo(() => ({ __html: outer ? flowBlockInnerHtml(outer.finalOutput) : '' }), [outer]);
-  // Two keys onto ONE stage: same body, different header title, so each block's modal is named
-  // after the block that was clicked (see the 'final-output' branch in buildFlowStage).
+  // The final norm illustrates the operation; the output shows recorded probabilities.
   const openFinalOutput = useCallback(() => archApiRef.current?.openStage('final-output'), []);
   const openFinalNorm = useCallback(() => archApiRef.current?.openStage('final-norm'), []);
 
@@ -293,23 +566,28 @@ export function ArchitectureTab({ visible, flow, promptIndex, error, onDomainCha
   useEffect(() => {
     if (routerSubTab === 'all-tokens') archApiRef.current?.replayPop();
     archApiRef.current?.fitGridHeight(routerSubTab);
-  }, [routerSubTab, flow]);
+  }, [routerSubTab, flow, routerOpenNonce]);
 
   // Escape closes whichever modal is open (document-level in the prototype's bootstrap). The math
   // half is React state now; the Router modal stays an imperative class toggle for the moment.
   // ⚠ The Router half goes through the island's `closeRouterModal`, NOT a `classList.remove` here.
-  // Stripping the class directly skips `stopPlay()`, and ▶ Step through layers now auto-starts when
-  // the modal opens — so Escape would dismiss the modal and leave it cycling layers underneath.
+  // Stripping the class directly skips `stopPlay()`, so Escape could dismiss the modal and leave
+  // user-started playback cycling layers underneath.
   useEffect(() => {
     const onKeyDown = (ev: KeyboardEvent) => {
       if (ev.key === 'Escape') {
-        closeMathModal();
-        archApiRef.current?.closeRouterModal();
+        if (!visible) return;
+        if (tourExpanded) {
+          setTourExpanded(false);
+          return;
+        }
+        if (session.current.mathOpen) closeMathModal();
+        else archApiRef.current?.closeRouterModal();
       }
     };
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
-  }, [closeMathModal]);
+  }, [closeMathModal, tourExpanded, visible]);
 
   // Only block the whole panel on a true first-load (or a failure before anything ever loaded).
   // Once a prompt has loaded once, keep showing it — including while a same-model prompt switch
@@ -327,16 +605,15 @@ export function ArchitectureTab({ visible, flow, promptIndex, error, onDomainCha
     );
   }
 
-  // ---- the tour card's copy, for THIS model and THIS layer ----
-  const narration = pickNarration(!!flow.layer_flow.is_moa, flow.shared_experts);
-  // Step 6 (index 5) is the MoE block, but DeepSeek's layer 1 renders a "Dense FFN" block instead,
-  // so the card has to name the block it is actually highlighting. This reads `currentLayer` on
-  // every render, which is what makes it LIVE: stepping layers with the tour open at step 6 flips
-  // the title and body between Dense FFN and MoE, because onLayerChange re-renders this component.
-  const denseHere = !flow.layers[currentLayer]?.tokens;
-  const tourCard = tourStep === 5 && denseHere
-    ? { title: `Dense FFN (layer ${currentLayer + 1})`, text: DENSE_FFN_TEXT }
-    : narration[tourStep];
+  const tourCard = tutorialSteps[tourStep] ?? tutorialSteps[0];
+  const mainStepCount = tutorialSteps.at(-1)!.mainStep;
+  const tourNumber = `${tourCard.mainStep}${tourCard.substep ? `.${tourCard.substep}` : ''}`;
+  const tokenLabel = flow.tokens[selectedToken]?.text.trim() || '(space)';
+  const selectedRouting = flow.layers[currentLayer]?.tokens?.[selectedToken];
+  const leadIndex = selectedRouting?.top_weights.reduce((best, weight, i, weights) => weight > weights[best] ? i : best, 0) ?? 0;
+  const routerSummary = selectedRouting
+    ? `For “${tokenLabel}”, expert ${selectedRouting.top_experts[leadIndex] + 1} has the strongest selected weight: ${(selectedRouting.top_weights[leadIndex] * 100).toFixed(2)}%. The other selected experts also contribute to this token’s result.`
+    : '';
 
   // One sentence per architecture: DeepSeek routes at every layer but its dense one and always
   // runs its shared experts; JetMoE routes attention as well as the FFN; OLMoE is the plain case.
@@ -351,7 +628,7 @@ export function ArchitectureTab({ visible, flow, promptIndex, error, onDomainCha
       : `all ${flow.num_experts} experts at each of ${flow.num_layers} layers`;
 
   return (
-    <div style={{ display: visible ? undefined : 'none' }}>
+    <div ref={architectureRef} data-architecture className="architecture-tutorial" style={{ display: visible ? undefined : 'none' }}>
       <div>
         <p className="sub">
           {/* ⚠ STRAIGHT double quotes (U+0022), exactly as the imperative
@@ -364,16 +641,7 @@ export function ArchitectureTab({ visible, flow, promptIndex, error, onDomainCha
         </p>
         <div className="panel">
           <div className="flow-header">
-            {/* "‹ Transformer Block N ›" label — centered, level with Start tour; filled by archExplorer. */}
             <div id="flow-block-label" className="flow-block-label"></div>
-            <button
-              className="play-btn"
-              id="start-tour-btn"
-              type="button"
-              onClick={() => { setTourStep(0); setTourOpen(true); }}
-            >
-              ▶ Start tour
-            </button>
           </div>
 
           {/* The flow row. React renders the three blocks that do NOT depend on the current layer
@@ -384,7 +652,7 @@ export function ArchitectureTab({ visible, flow, promptIndex, error, onDomainCha
               The middle connector is NOT shrinkable: that 20px gap is what the tuck's
               THROW_PX = 18 travels into. The other two give way instead, which is what pays for the
               Final RMSNorm's 64px (see `.layer-card-row .pdf-connector` in moe.css). */}
-          <div className="pdf-scroll">
+          <div className="flow-viewport"><div className="pdf-scroll">
             <div className="pdf-flow-row" id="pdf-flow-row">
               {outer && (
                 <>
@@ -400,27 +668,50 @@ export function ArchitectureTab({ visible, flow, promptIndex, error, onDomainCha
                 </>
               )}
             </div>
-          </div>
+          </div></div>
         </div>
 
-        <div className={`tour-overlay${tourOpen ? ' open' : ''}`} id="tour-overlay">
-          <div className="tour-card">
+        <div className={`tour-overlay open${mathStage || routerVisible ? ' popup-focused' : ''}${tourExpanded ? ' tour-expanded' : ''}`} id="tour-overlay" ref={dockRef}>
+          <div className="panel" id="param-count-panel" inert={tourExpanded || !!mathStage || routerVisible} dangerouslySetInnerHTML={paramPanelHtml} />
+          <div className="tour-card" role="region" aria-label="Model Architecture tutorial" data-tour-step={tourCard.id}>
+            <div className="tour-toolbar">
             <div className="tour-step-label" id="tour-step-label">
-              Step {tourStep + 1} of {narration.length}
+              Step {tourCard.mainStep} of {mainStepCount}{tourCard.view.kind !== 'intro' && ` · Transformer Block ${currentLayer + 1}`}
             </div>
-            <h3 id="tour-title">{tourCard.title}</h3>
-            <p id="tour-text">{tourCard.text}</p>
-            <div className="tour-controls">
-              <button className="play-btn" id="tour-exit-btn" type="button" onClick={() => setTourOpen(false)}>
-                Exit tour
+              <button
+                className="tour-expand-btn"
+                type="button"
+                aria-label={tourExpanded ? 'Collapse guided tour' : 'Expand guided tour'}
+                title={tourExpanded ? 'Collapse guided tour (Esc)' : 'Expand guided tour'}
+                aria-expanded={tourExpanded}
+                onClick={() => setTourExpanded(expanded => !expanded)}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d={tourExpanded ? 'M4 9h5V4M9 9 3 3M20 15h-5v5M15 15l6 6' : 'M9 3H3v6M3 3l7 7M15 21h6v-6M21 21l-7-7'} />
+                </svg>
               </button>
+            </div>
+            <div className="tour-heading">
+              <h3 id="tour-title">{tourNumber} {tourCard.title}</h3>
+              <label className="tour-token-picker" hidden={tourCard.view.kind === 'intro'}>Token
+                <select aria-label="Tutorial token" value={selectedToken} onChange={(ev) => chooseToken(Number(ev.target.value))}>
+                  {flow.tokens.map((token, i) => <option key={i} value={i}>{i + 1}. {token.text.trim() || '(space)'}</option>)}
+                </select>
+              </label>
+            </div>
+            <div className="tour-prose" aria-live="polite">
+              {tourCard.text && <p id="tour-text">{tourCard.text}</p>}
+              {tourCard.id === 'router-single' && <p>{routerSummary}</p>}
+              <div dangerouslySetInnerHTML={guideProse} />
+            </div>
+            <div className="tour-controls">
               <div style={{ flex: '1 1 auto' }}></div>
               <button
                 className="play-btn"
                 id="tour-back-btn"
                 type="button"
                 disabled={tourStep === 0}
-                onClick={() => setTourStep((s) => Math.max(0, s - 1))}
+                onClick={() => navigateTutorial(session.current.step - 1)}
               >
                 ‹ Back
               </button>
@@ -428,19 +719,17 @@ export function ArchitectureTab({ visible, flow, promptIndex, error, onDomainCha
                 className="play-btn"
                 id="tour-next-btn"
                 type="button"
+                disabled={loading || !!error}
                 onClick={() => {
-                  if (tourStep < narration.length - 1) setTourStep((s) => s + 1);
-                  else setTourOpen(false);
+                  if (session.current.step < tutorialSteps.length - 1) navigateTutorial(session.current.step + 1);
+                  else startTutorial();
                 }}
               >
-                {tourStep === narration.length - 1 ? 'Finish' : 'Next ›'}
+                {tourStep === tutorialSteps.length - 1 ? 'Restart tour' : 'Next ›'}
               </button>
             </div>
           </div>
         </div>
-
-        {/* Model-level parameter arithmetic, one branch per architecture — see paramPanel.ts. */}
-        <div className="panel" id="param-count-panel" dangerouslySetInnerHTML={paramPanelHtml} />
       </div>
 
       <div className="tooltip" id="tooltip"></div>
@@ -469,7 +758,7 @@ export function ArchitectureTab({ visible, flow, promptIndex, error, onDomainCha
                 RMSNorms, both Residual adds, Final RMSNorm, Final Output). Stages that supply ''
                 stay unnamed, and that '' is also what stops a stale bar outliving its panels. */}
             <div id="math-modal-header-slot" dangerouslySetInnerHTML={headerHtml} />
-            <button className="math-modal-close" id="math-modal-close" onClick={closeMathModal}>✕</button>
+            <button className="math-modal-close" id="math-modal-close" aria-label="Close computation popup" onClick={closeMathModal}>✕</button>
           </div>
           {/* Stage content stays string-built (see archExplorer's StagePayload): the attention
               reveal addresses up to ~2,320 .mm-cells by query, and componentising them would add
@@ -500,7 +789,7 @@ export function ArchitectureTab({ visible, flow, promptIndex, error, onDomainCha
           // nothing in src/ reads it.
           data-router-tab={routerSubTab}
           style={{
-            maxWidth: 1152,
+            maxWidth: 1232,
             width: '78vw',
             maxHeight: routerSubTab === 'per-token' ? '92vh' : undefined,
             display: 'flex',
@@ -519,7 +808,7 @@ export function ArchitectureTab({ visible, flow, promptIndex, error, onDomainCha
                 type="button"
                 role="tab"
                 aria-selected={routerSubTab === 'per-token'}
-                onClick={() => setRouterSubTab('per-token')}
+                onClick={() => changeRouterTab('per-token')}
               >
                 Single token routing
               </button>
@@ -528,7 +817,7 @@ export function ArchitectureTab({ visible, flow, promptIndex, error, onDomainCha
                 type="button"
                 role="tab"
                 aria-selected={routerSubTab === 'all-tokens'}
-                onClick={() => setRouterSubTab('all-tokens')}
+                onClick={() => changeRouterTab('all-tokens')}
               >
                 All tokens routing
               </button>
@@ -541,7 +830,7 @@ export function ArchitectureTab({ visible, flow, promptIndex, error, onDomainCha
             <button className="play-btn" id="play-btn" style={{ marginLeft: 0 }}>
               ▶ Step through layers
             </button>
-            <button className="math-modal-close" id="moe-grid-close">✕</button>
+            <button className="math-modal-close" id="moe-grid-close" aria-label="Close Router">✕</button>
           </div>
           <div
             className="math-modal-body"
@@ -630,9 +919,12 @@ export function ArchitectureTab({ visible, flow, promptIndex, error, onDomainCha
               <PerTokenRouting
                 key={promptIndex}
                 flow={flow}
-                currentLayer={currentLayer}
+                currentLayer={Math.min(currentLayer, flow.num_layers - 1)}
                 routerOpenNonce={routerOpenNonce}
                 onReplayReady={registerPerTokenReplay}
+                selectedToken={Math.min(selectedToken, flow.tokens.length - 1)}
+                onTokenChange={chooseToken}
+                active={visible && routerVisible && routerSubTab === 'per-token' && !mathStage}
               />
             </div>
 
@@ -655,7 +947,7 @@ export function ArchitectureTab({ visible, flow, promptIndex, error, onDomainCha
               <svg
                 className="moe-svg"
                 id="moe-svg"
-                viewBox="0 0 1040 460"
+                viewBox="0 0 1120 460"
                 xmlns="http://www.w3.org/2000/svg"
               >
                 <text className="layer-caption" id="layer-caption" x="0" y="16"></text>

@@ -106,13 +106,17 @@ interface ExpertGridProps {
   topSet: Set<number>;
   /** Lazily resolves the sample tokens shown in a cell's tooltip. */
   sampleTokensFor: (expert: number) => SampleToken[];
+  /** Opens DomainCellModal for this cell — same pop-up the Histogram view's bars open. Optional
+   *  only for callers that genuinely have nowhere to route it; every current one passes it. */
+  onCellClick?: (expert: number) => void;
 }
 
 /**
  * One category's experts at one layer, as a sequential heatmap (8×8 for a 64-expert model).
  * Colour encodes how often the category routed to each expert; a ring marks
  * the top-k. Comparing two of these side by side is the whole payoff: the
- * ringed sets barely overlap.
+ * ringed sets barely overlap. Cells are both hover (quick tooltip) and click (the full
+ * DomainCellModal detail, same as a Histogram bar) — see `onCellClick`.
  */
 export function ExpertGrid({
   categoryLabel,
@@ -120,6 +124,7 @@ export function ExpertGrid({
   freqs,
   topSet,
   sampleTokensFor,
+  onCellClick,
 }: ExpertGridProps) {
   const [hover, setHover] = useState<HoverState | null>(null);
   const reducedMotion = usePrefersReducedMotion();
@@ -246,6 +251,7 @@ export function ExpertGrid({
           return (
             <g key={id} data-top={isTop ? 'true' : 'false'}>
               <rect
+                data-expert-num={id}
                 x={x}
                 y={y}
                 width={CELL}
@@ -253,11 +259,13 @@ export function ExpertGrid({
                 rx={6}
                 fill={heatColor(freq, hue)}
                 stroke="var(--color-ink)"
-                strokeOpacity={isHovered ? 0.9 : isTop ? 0.5 : 0.06}
-                strokeWidth={isTop || isHovered ? 1.5 : 1}
-                // No pointer cursor: cells are hover-only, and a pointer would promise the
-                // click-for-details modal that the Histogram view's bars have and these don't.
-                style={{ transition: 'stroke-opacity 150ms var(--ease-out-expo)' }}
+                strokeOpacity={isHovered ? 0.8 : isTop ? 0.38 : 0.05}
+                strokeWidth={isTop || isHovered ? 1.25 : 1}
+                style={{
+                  transition: 'stroke-opacity 150ms var(--ease-out-expo)',
+                  cursor: onCellClick ? 'pointer' : undefined,
+                }}
+                onClick={onCellClick ? () => onCellClick(id) : undefined}
                 onMouseMove={(e) => {
                   // The tooltip is anchored to the cell, not the pointer, so re-running this on
                   // every move of the same cell only costs a re-render of all 64 cells.
@@ -290,7 +298,8 @@ export function ExpertGrid({
                 textAnchor="middle"
                 dominantBaseline="central"
                 className="font-label"
-                fontSize={12}
+                fontSize={10}
+                fontWeight={700}
                 fill={heatTextColor(freq)}
                 fillOpacity={0.6}
                 pointerEvents="none"

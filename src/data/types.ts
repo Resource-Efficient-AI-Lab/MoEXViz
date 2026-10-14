@@ -70,6 +70,9 @@ export interface UmapPoint {
   x: number;
   y: number;
   dominant_category: string;
+  /** The vector this point was projected from: activation rate (0-1) per category, at this one
+   *  (layer, expert). Same numbers as `activation_rate[category][layer][expert]`. */
+  activation_rate: Record<string, number>;
   top_tokens: UmapTopToken[];
 }
 

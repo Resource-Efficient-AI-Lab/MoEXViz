@@ -1,6 +1,8 @@
 import { useEffect } from 'react';
 import { CATEGORY_LABELS } from '../../data/categories';
 import { CATEGORY_PALETTE } from '../../components/ClusterPlot/categoryPalette';
+import { cellMetrics } from '../../utils/domainStats';
+import { useDraggable } from '../useDraggable';
 import type { DomainSpecializationData } from '../../data/types';
 
 export interface DomainCell {
@@ -29,6 +31,11 @@ export function DomainCellModal({ data, cell, onClose }: DomainCellModalProps) {
   const { category, layer, expert } = cell;
   const label = CATEGORY_LABELS[category] ?? category;
   const color = CATEGORY_PALETTE[category] ?? 'var(--color-muted)';
+  // Drag handle is the header row only, not the whole card — the body below it is plain text and
+  // token chips with nothing to click, but restricting it here keeps the same convention every
+  // other draggable pop-up in the app uses (DomainCellModal has no onClick targets to protect, but
+  // AllCategoriesModal and the Architecture tab's modals, built the same way, do).
+  const drag = useDraggable();
 
   useEffect(() => {
     const onKeyDown = (ev: KeyboardEvent) => {
@@ -38,13 +45,7 @@ export function DomainCellModal({ data, cell, onClose }: DomainCellModalProps) {
     return () => document.removeEventListener('keydown', onKeyDown);
   }, [onClose]);
 
-  const total = data.token_counts[category];
-  const rate = data.activation_rate[category][layer][expert];
-  const count = Math.round(rate * total);
-  const normalized = (rate / data.top_k_experts) * 100;
-  const avgProb = data.avg_prob[category][layer][expert] * 100;
-  const specScore = data.specialization_score[category][layer][expert];
-  const fold = Math.pow(2, specScore);
+  const { total, count, rate, normalized, avgProb, fold } = cellMetrics(data, category, layer, expert);
 
   const pairs = data.expert_token_idx[category]?.[layer]?.[expert] ?? [];
   const tokens = data.domain_tokens[category] ?? [];
@@ -67,8 +68,18 @@ export function DomainCellModal({ data, cell, onClose }: DomainCellModalProps) {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="max-h-[80vh] w-full max-w-md overflow-y-auto rounded-md bg-paper p-5 shadow-overlay-float">
-        <div className="flex items-start justify-between gap-3">
+      <div
+        className="max-h-[95vh] w-full max-w-lg overflow-y-auto rounded-md bg-paper p-5 shadow-overlay-float"
+        style={{ transform: `translate(${drag.offset.x}px, ${drag.offset.y}px)` }}
+      >
+        <div
+          className="tour-card-draggable flex items-start justify-between gap-3"
+          style={{ touchAction: 'none' }}
+          onPointerDown={drag.onPointerDown}
+          onPointerMove={drag.onPointerMove}
+          onPointerUp={drag.onPointerUp}
+          onPointerCancel={drag.onPointerUp}
+        >
           <h3 className="font-title text-base font-semibold text-ink">
             &ldquo;{label}&rdquo; → expert #{expert + 1} · layer {layer + 1}
           </h3>
@@ -97,28 +108,36 @@ export function DomainCellModal({ data, cell, onClose }: DomainCellModalProps) {
           </span>
         </div>
 
-        <div className="mt-4 space-y-1.5 font-body text-sm leading-relaxed text-ink">
-          <p>
+        {/* One bullet per metric (paper §4.4), not a run of paragraphs: each line names its own
+            formula, over real count/total for this cell, the way the paper itself defines it. */}
+        <ul className="mt-4 list-disc space-y-1.5 pl-4 font-body text-sm leading-relaxed text-ink">
+          <li>
             {label} chose expert #{expert + 1} for <span className="font-label font-semibold">{count}</span> of{' '}
             <span className="font-label font-semibold">{total}</span> tokens.
-          </p>
-          <p>
-            Expert activation rate = {count} ÷ {total} ={' '}
+          </li>
+          <li>
+            Activation rate = hits ÷ total = {count} ÷ {total} ={' '}
             <span className="font-label font-semibold">{(rate * 100).toFixed(2)}%</span>
-          </p>
-          <p>
-            Normalized (÷ top-{data.top_k_experts}, sums to 100% across all {data.num_experts}) ={' '}
+          </li>
+          <li>
+            Normalized rate = activation rate ÷ top-{data.top_k_experts}, so every expert's share
+            for {label} sums to 100% across all {data.num_experts} ={' '}
             <span className="font-label font-semibold">{normalized.toFixed(2)}%</span>
-          </p>
-          <p>
-            Avg softmax probability (selected or not) ={' '}
+          </li>
+          <li>
+            Avg. softmax probability = the router's mean score for this expert, selected or not ={' '}
             <span className="font-label font-semibold">{avgProb.toFixed(2)}%</span>
-          </p>
-        </div>
+          </li>
+        </ul>
 
         <div className="mt-3 rounded-sm bg-surface p-3 font-body text-sm leading-relaxed text-ink">
           Specialization score: this expert fires <span className="font-semibold">{fold.toFixed(2)}×</span> the
           6-category average for (layer {layer + 1}, expert #{expert + 1}).
+          <p className="mt-1 font-body text-xs text-muted">
+            score = log₂[(this rate + ε) ÷ (6-category average rate + ε)], ε = 0.0001 (keeps the
+            log finite at a 0% rate); shown above as 2^score, i.e. "N× the average" — above 1×
+            means {label} leans on this expert harder than a typical category does.
+          </p>
         </div>
 
         <div className="mt-4">

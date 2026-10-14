@@ -11,8 +11,9 @@ type Stage = 0 | 1 | 2 | 3 | 4;
  *  and router fill 500ms, expert nodes 450ms), or the beat is visually cut off by the next one.
  *  The old JourneyStage gaps (250/400/400 from `[120, 370, 770, 1170]`) were all shorter than
  *  their own transitions, which is what read as "too fast"; the transition durations themselves
- *  were already fine and are unchanged. Total run 2.02s. */
-const BEAT_OFFSETS = [120, 620, 1320, 2020];
+ *  were already fine and are unchanged. Keep selected expert IDs visible for 2.2s before
+ *  replacing them with weights. Total run 3.52s. */
+const BEAT_OFFSETS = [120, 620, 1320, 3520];
 
 /** Spell out small counts so the caption reads naturally ("the other seven" / "the other five"),
  *  matching the original OLMoE copy while staying correct for DeepSeek (top-6) and JetMoE (top-2). */
@@ -40,6 +41,10 @@ interface PerTokenRoutingProps {
    *  layer row so it sits exactly where the All-tokens tab's replay button does. `null` means there
    *  is nothing to replay (reduced motion, or a dense layer with no fan). */
   onReplayReady?: (replay: (() => void) | null) => void;
+  selectedToken: number;
+  onTokenChange: (token: number) => void;
+  /** Cancels the outgoing view's beat timers when Next leaves the fan. */
+  active: boolean;
 }
 
 /**
@@ -54,9 +59,11 @@ export function PerTokenRouting({
   currentLayer,
   routerOpenNonce,
   onReplayReady,
+  selectedToken: followTokenIdx,
+  onTokenChange,
+  active,
 }: PerTokenRoutingProps) {
   const reducedMotion = usePrefersReducedMotion();
-  const [followTokenIdx, setFollowTokenIdx] = useState(0);
   const [stage, setStage] = useState<Stage>(reducedMotion ? 4 : 0);
   const [replayNonce, setReplayNonce] = useState(0);
 
@@ -78,6 +85,7 @@ export function PerTokenRouting({
   // inside that same synchronous commit, and its own setState is flushed before paint. Nothing
   // here measures geometry, so running pre-paint costs nothing.
   useLayoutEffect(() => {
+    if (!active) return;
     if (reducedMotion) {
       setStage(4);
       return;
@@ -90,13 +98,13 @@ export function PerTokenRouting({
       beatTimers.current.forEach(clearTimeout);
       beatTimers.current = [];
     };
-  }, [followTokenIdx, replayNonce, reducedMotion, routerOpenNonce]);
+  }, [followTokenIdx, replayNonce, reducedMotion, routerOpenNonce, active]);
 
   // Layer change → snap instantly to the fully-lit stage 4 (no beats). Skipped on mount so it
   // doesn't clobber the first token's beat sequence started by the effect above.
   // ⚠ It must also CANCEL any beats still pending, or a layer paged mid-sequence snaps to 4 and is
   // then dragged back down to stage 1 by the surviving timeouts — the effect above only clears them
-  // when its own deps change, which a layer change is not. The window is the full 2.02s run, so the
+  // when its own deps change, which a layer change is not. The window is the full 3.52s run, so the
   // modal's own layer pager hits it easily.
   // ⚠ Do NOT lift those two lines into a `clearBeats()` helper: exhaustive-deps would then want it
   // in this dep list, which re-runs the effect on every render and kills the ladder outright.
@@ -163,7 +171,7 @@ export function PerTokenRouting({
             type="button"
             className={`ptr-chip${i === followTokenIdx ? ' active' : ''}`}
             style={{ ['--chip-color' as string]: chipColor() }}
-            onClick={() => setFollowTokenIdx(i)}
+            onClick={() => onTokenChange(i)}
           >
             {t.text.trim() || '(space)'}
           </button>
