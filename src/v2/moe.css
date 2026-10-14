@@ -110,7 +110,7 @@
 }
 header.full-bleed {
   background: var(--surface-1); border-bottom: 1px solid var(--border);
-  padding-top: 6px; padding-bottom: 5px; margin-bottom: 5px;
+  padding-top: 6px; padding-bottom: 5px; margin-bottom: 0;
 }
 
 header h1 { font-size: 20px; font-weight: 650; margin: 0 0 2px; }
@@ -168,14 +168,15 @@ code.inline { background: var(--gridline); border-radius: 4px; padding: 1px 5px;
 .play-btn:disabled { opacity: 0.4; cursor: not-allowed; }
 .play-btn:disabled:hover { background: transparent; }
 
-/* Not in the prototype: the tab bar's rule is a page-level divider, so it runs to both viewport
-   edges like header.full-bleed's does, instead of stopping at the content column. Spelled out
-   inline rather than via .full-bleed only because it wants no right padding — the two now use the
-   identical -0.5in / 100vw / 0.5in technique, so they cannot drift apart at any viewport width. */
+/* Project links are centered beside the whole model-picker and tab band. */
+.app-toolbar {
+  display: flex; align-items: center; flex-wrap: wrap; gap: 12px 24px;
+  border-bottom: 1px solid var(--border); margin-bottom: 4px;
+}
+.app-toolbar-main { flex: 1 1 420px; min-width: 0; padding-top: 5px; }
+.app-toolbar #prompt-select { min-width: 0; max-width: 100%; }
 .top-tabs {
-  display: flex; gap: 2px; border-bottom: 1px solid var(--border);
-  margin: 1px 0 4px; margin-left: -0.5in;
-  width: 100vw; padding-left: 0.5in; box-sizing: border-box;
+  display: flex; flex-wrap: wrap; gap: 2px; margin-top: 1px;
 }
 .top-tab {
   border: 1.5px solid transparent; border-bottom: 2.5px solid transparent;
@@ -189,6 +190,25 @@ code.inline { background: var(--gridline); border-radius: 4px; padding: 1px 5px;
   color: var(--seq-500); border-color: var(--seq-500);
   background: color-mix(in srgb, var(--seq-500) 8%, transparent);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--seq-500) 14%, transparent);
+}
+
+.moe-root .project-links {
+  display: flex; align-items: center; gap: 9px;
+  margin-left: auto; padding: 0;
+}
+.moe-root .project-links > span { display: inline-flex; }
+.moe-root .project-link {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 45px; height: 40px; padding: 0; flex-shrink: 0;
+  border: 1.5px solid transparent; border-radius: 8px;
+  background: transparent; color: var(--text-primary);
+  text-decoration: none; cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+.moe-root .project-link:hover { color: var(--seq-500); }
+.moe-root .project-link:focus-visible { outline: 2px solid var(--seq-500); outline-offset: 3px; }
+.moe-root .project-link:disabled {
+  background: transparent; color: var(--text-primary); cursor: not-allowed;
 }
 
 .sub-tabs { display: flex; gap: 4px; flex-wrap: wrap; margin: 2px 0 8px; }
