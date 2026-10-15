@@ -27,6 +27,7 @@ import gsap from 'gsap';
 import type { PromptFlow } from './types';
 import type { TutorialView } from './tutorial';
 import { sequentialBlue, tokenColorAt, tokenRampColor } from './colorRamps';
+import { buildFinalNormData, layerFeedForwardGrids } from './finalNorm';
 import {
   ATTN_STEPS_MHA, ATTN_STEPS_MOA, TRANSPOSE_NOTE,
   attnMapGrid, attnPanel, attnSubTabBar, beat, buildAttnGridHTML, buildGridHTML,
@@ -743,6 +744,7 @@ export function bootArchExplorer(
 
   // ---- full transformer block walkthrough: horizontal ribbon diagram ----
   const flow = DATA.layer_flow;
+  const finalNorm = buildFinalNormData(DATA);
   // OLMoE applies RMSNorm to Q and K before the head split; DeepSeek does not (has_qk_norm:
   // false). OLMoE's older trace predates the flag, so fall back to probing for its q_normed tensor.
   const hasQkNorm = flow.has_qk_norm ?? ('q_normed' in (flow.per_layer[0] || {}));
@@ -2103,6 +2105,11 @@ export function bootArchExplorer(
     stageSkipReveal = false;
     const ti = flowToken, li = currentLayer;
     const lf = flow.per_layer[li];
+    const feedForward = layerFeedForwardGrids(DATA, li, finalNorm.data);
+    // The final trace layer_output is already normalized. Only the reconstructed
+    // pre-norm sum belongs in the final block's residual/combined-output views.
+    const combinedOutput = feedForward?.combinedOutput;
+    const layerOutput = feedForward?.output;
     const tokenText = tokens[ti].text.trim() || '(space)';
     const H = DATA.hidden_size;
     // The layer's residual-stream input: the embedding on layer 1, the previous layer's output after
@@ -2116,6 +2123,10 @@ export function bootArchExplorer(
     // norm / residual / final stages carry. `title` itself is NOT displayed (#math-modal-title is
     // display:none); the stages that are named are named through here.
     let title = '', html = '', headerExtra = '';
+
+    if (!feedForward && ['moe-combine-all', 'moe', 'add2', 'output'].includes(stageKey)) {
+      return { title: 'Feed-forward output', headerExtra: stageTitleBar('Feed-forward output'), html: stagedRoot('<div class="math-block"><p class="math-hint">' + escapeHtml(finalNorm.error ?? 'Layer data is unavailable.') + '</p></div>') };
+    }
 
     if (stageKey === 'embed') {
       title = '"' + tokenText + '" · Token Embedding';
@@ -2572,7 +2583,13 @@ export function bootArchExplorer(
         // would be the one stage whose arming rules never apply.
         return { title, headerExtra, html: stagedRoot(html) };
       }
-      html = '<p class="math-hint" style="margin:0 0 10px">For every input token: the router\'s real top-' + DATA.top_k_experts + ' experts and their real softmax weights, then Σ (weight × expert_out), the actual weighted sum that becomes this layer\'s real MoE output for that token.' + (DATA.shared_experts ? ' The ' + DATA.shared_experts + ' always-on shared experts (merged into one feed-forward) are then added in gate-free, shown as “+ shared”.' : '') + '</p>';
+      const finalCombine = li === finalNorm.data?.layerIndex;
+      const selectedGateSum = finalCombine && finalNorm.data?.checkpoint.selectedGateNormalization === 'sum';
+      const hasOutputBias = finalCombine && !!finalNorm.data?.checkpoint.outputBias;
+      html = '<p class="math-hint" style="margin:0 0 10px">' + (finalCombine
+        ? 'For every input token: combine the selected top-' + DATA.top_k_experts + ' expert outputs using their routing weights.' + (selectedGateSum ? ' The percentages below are the router\'s full-softmax probabilities; divide their weighted sum by the selected probabilities\' sum to obtain the model\'s selected-gate weighting.' : '') + (hasOutputBias ? ' Then add the feed-forward output bias.' : '')
+        : 'For every input token: the router\'s real top-' + DATA.top_k_experts + ' experts and their real softmax weights, then Σ (weight × expert_out), the actual weighted sum that becomes this layer\'s real MoE output for that token.') +
+        (DATA.shared_experts ? ' The ' + DATA.shared_experts + ' always-on shared experts (merged into one feed-forward) are then added in gate-free, shown as “+ shared”.' : '') + '</p>';
       // The one stage that is a LIST rather than an equation, so it gets its own container and the
       // `data-sweep` mode: the beat is a whole token row cascading top to bottom, not the colour
       // strip inside it (four of each row's five children are text, and revealing only the strip
@@ -2582,13 +2599,15 @@ export function bootArchExplorer(
       tokens.forEach((t, tIdx) => {
         const ttAll = DATA.layers[li].tokens[tIdx];
         const orderedAll = ttAll.top_experts.map((e: number, k: number) => ({ e, w: ttAll.top_weights[k] })).sort((a: any, b: any) => b.w - a.w);
-        const eqText = orderedAll.map((o: any) => 'e' + (o.e + 1) + '×' + (o.w * 100).toFixed(1) + '%').join(' + ') + (DATA.shared_experts ? ' + shared' : '');
+        const terms = orderedAll.map((o: any) => 'e' + (o.e + 1) + '×' + (o.w * 100).toFixed(1) + '%').join(' + ');
+        const probabilitySum = ttAll.top_weights.reduce((sum: number, weight: number) => sum + weight, 0);
+        const eqText = (selectedGateSum ? '(' + terms + ') / ' + (probabilitySum * 100).toFixed(1) + '%' : terms) + (DATA.shared_experts ? ' + shared' : '') + (hasOutputBias ? ' + bias' : '');
         html += '<div class="mm-combined-row" style="display:flex;align-items:center;justify-content:safe center;gap:10px;flex-wrap:nowrap;margin:8px 0;padding:9px 12px;' +
           'background:var(--page);border:1px solid var(--border);border-radius:8px;overflow-x:auto;">' +
           '<div style="font-weight:700;font-size:12.5px;flex:0 0 auto;min-width:56px;">"' + escapeHtml(t.text.trim() || '·') + '"</div>' +
           '<div style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;color:var(--text-secondary);flex:0 0 auto;white-space:nowrap;">' + eqText + '</div>' +
           '<div style="font-size:15px;color:var(--text-muted);flex:0 0 auto;">=</div>' +
-          stripHTML(lf.moe_output[tIdx], 5) +
+          stripHTML(combinedOutput![tIdx], 5) +
           '<div style="font-size:10px;color:var(--text-muted);flex:0 0 auto;">(1,' + H + ')</div>' +
           '</div>';
       });
@@ -2640,7 +2659,7 @@ export function bootArchExplorer(
         '<div class="math-eq wrap">' + ordered.map((o: any) => 'e' + (o.e + 1) + ' ' + (o.w * 100).toFixed(1) + '%').join(' &nbsp;·&nbsp; ') + '</div>' +
         '<p class="math-hint" style="margin:8px 0 0">Click any cell in the grid further down the page for the full per-expert router + feed-forward arithmetic, same layer, same token.</p></div>';
       html += '<div class="math-block"><h3>Combined MoE output (sum of all activated experts, weighted)</h3>' +
-        diagramRow([matBlock('MoE layer output', '(1,' + H + ')', stripHTML(lf.moe_output[ti], 5))]) + '</div>';
+        diagramRow([matBlock('MoE layer output', '(1,' + H + ')', stripHTML(combinedOutput![ti], 5))]) + '</div>';
     } else if (stageKey === 'add2') {
       // Same one-const rule as 'ln2': the header title and the hidden title read the same source.
       const feedName = DATA.layers[li].tokens ? 'MoE' : 'FFN';
@@ -2653,7 +2672,7 @@ export function bootArchExplorer(
       // every build, so it tracks the Router pager and ▶ Step-through as well as a block click.
       const lastLayer = li === DATA.num_layers - 1;
       html = '<div class="math-block"><h3>Add ' + feedLabel + ' back to the residual stream</h3>' +
-        diagramRow([enlargedMatBlock('residual (post-attention)', allDims, gridHTML(lf.after_attn_residual, 5)), opSpan('+'), enlargedMatBlock(feedLabel, allDims, gridHTML(lf.moe_output, 5)), opSpan('='), enlargedMatBlock('layer output', allDims, gridHTML(lf.layer_output, 5))]) +
+        diagramRow([enlargedMatBlock('residual (post-attention)', allDims, gridHTML(lf.after_attn_residual, 5)), opSpan('+'), enlargedMatBlock(feedLabel, allDims, gridHTML(combinedOutput!, 5)), opSpan('='), enlargedMatBlock('layer output', allDims, gridHTML(layerOutput!, 5))]) +
         '<p class="math-hint" style="margin:8px 0 0">One row per token, added position by position. This sum is the layer\'s output, and ' + (lastLayer
           ? 'this is the last layer: the final RMSNorm and the LM head come next.'
           : 'it is what layer ' + (li + 2) + ' reads as its residual stream.') + '</p></div>';
@@ -2661,7 +2680,7 @@ export function bootArchExplorer(
       title = '"' + tokenText + '" · Layer Output · layer ' + (li + 1);
       const isLast = li === DATA.num_layers - 1;
       html = '<div class="math-block"><h3>Output of layer ' + (li + 1) + '</h3>' +
-        diagramRow([matBlock('layer output', '(1,' + H + ')', stripHTML(lf.layer_output[ti], 5))]) +
+        diagramRow([matBlock('layer output', '(1,' + H + ')', stripHTML(layerOutput![ti], 5))]) +
         '<p class="math-hint" style="margin:8px 0 0">' + (isLast
           ? 'This is the last layer: one more final RMSNorm, then × the (' + H + ', vocab_size) LM head matrix, gives the next-token logits shown in the Final Output block (top pick: ' + escapeHtml(DATA.next_token_candidates[0].token.trim()) + ' at ' + (DATA.next_token_candidates[0].prob * 100).toFixed(1) + '%).'
           : 'This becomes the residual input to layer ' + (li + 2) + '\'s RMSNorm, switch layer tabs further down to follow it forward.') + '</p></div>';
@@ -2670,15 +2689,10 @@ export function bootArchExplorer(
       title = fromNorm ? 'Final RMSNorm' : 'Final Output';
       headerExtra = stageTitleBar(fromNorm ? 'Final RMSNorm' : 'Final Output');
       if (fromNorm) {
-        html = '<div class="math-block"><h3>Normalize the final residual stream</h3>' +
-          '<div class="conceptual-norm" role="img" aria-label="Final stream, divide each row by its own RMS, apply learned gain gamma, normalized final stream">' +
-          '<div class="conceptual-step"><b>Final stream x</b><span>After Transformer Block ' + DATA.num_layers + '</span><span>(' + numTokens + ', ' + H + ')</span></div>' +
-          '<span class="math-op">→</span><div class="conceptual-step"><b>Divide by RMS</b><span>One scale per token</span></div>' +
-          '<span class="math-op">→</span><div class="conceptual-step"><b>Apply learned γ</b><span>Separate final gains</span><span>(' + H + ',)</span></div>' +
-          '<span class="math-op">→</span><div class="conceptual-step"><b>Normalized stream</b><span>Ready for the LM head</span></div></div>' +
-          '<div class="math-eq wrap">y = x / sqrt(mean(x²) + ε) ⊙ γ &nbsp; <span class="op">ε = ' + RMS_EPS + '</span></div>' +
-          '<div class="diagram-legend">Conceptual illustration · numerical final RMSNorm activations and gains are not included in this trace.</div>' +
-          '<p class="math-hint">After all ' + DATA.num_layers + ' Transformer Blocks, each token is normalized independently, using the same RMSNorm rule and a separate learned gain vector. It happens once, outside the repeating Transformer Block. This diagram illustrates the operation; it does not invent final numerical activations from the downsampled stream.</p></div>';
+        html = finalNorm.data
+          ? rmsBlock('RMSNorm', finalNorm.data.input, finalNorm.data.weight, finalNorm.data.output, 'ε = ' + RMS_EPS,
+            'After all ' + DATA.num_layers + ' Transformer Blocks, normalize each token row, then apply the final learned gains. This operation runs once, outside the repeating Transformer Block, and its normalized stream goes to the LM head.', false)
+          : '<div class="math-block"><h3>RMSNorm</h3><p class="math-hint">' + escapeHtml(finalNorm.error) + '</p></div>';
       } else {
         const candidates = [...DATA.next_token_candidates].sort((a, b) => b.prob - a.prob);
         const maxProb = candidates[0]?.prob || 1;
@@ -2691,7 +2705,7 @@ export function bootArchExplorer(
               '<span class="prediction-track"><span style="width:' + (candidate.prob / maxProb * 100) + '%"></span></span>' +
               '<span class="prediction-prob">' + (percent < 0.01 ? percent.toPrecision(3) : percent.toFixed(2)) + '%</span></div>';
           }).join('') + '</div>' +
-          '<p class="math-hint">These are the model’s recorded next-token probabilities after the complete prompt, using the last token’s final state. Choosing another piece in the intermediate diagrams does not change this recorded distribution. Only the stored candidates are shown; their probabilities are not renormalized. LM-head weights, final activations and vocabulary logits were not recorded.</p></div>';
+          '<p class="math-hint">These are the model’s recorded next-token probabilities after the complete prompt, using the last token’s final state. Choosing another piece in the intermediate diagrams does not change this recorded distribution. Only the stored candidates are shown; their probabilities are not renormalized. LM-head weights and vocabulary logits were not recorded.</p></div>';
       }
     }
 

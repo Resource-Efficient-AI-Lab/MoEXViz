@@ -514,9 +514,6 @@ footer.note { font-size: 11.5px; color: var(--text-muted); margin-top: 6px; line
 .architecture-tutorial .math-modal { max-height: calc(100dvh - 24px) !important; }
 .architecture-tutorial.tour-active #math-content .math-hint, .architecture-tutorial.tour-active .ptr-caption { display: none !important; }
 .diagram-legend { color: var(--text-secondary); font-size: 12px; line-height: 1.5; }
-.conceptual-norm { display: flex; align-items: center; justify-content: center; gap: 12px; flex-wrap: wrap; padding: 20px 0; }
-.conceptual-step { display: flex; flex-direction: column; gap: 7px; padding: 18px 14px; border: 1.5px solid var(--series-3); border-radius: 10px; background: var(--surface-1); text-align: center; }
-.conceptual-step span { font-size: 12px; color: var(--text-secondary); }
 .prediction-list { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
 .prediction-row { display: grid; grid-template-columns: 24px minmax(70px, 180px) minmax(80px, 1fr) 80px; gap: 12px; align-items: center; }
 .prediction-row code { white-space: pre-wrap; overflow-wrap: anywhere; }

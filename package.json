@@ -8,7 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "test:unit": "node --test tests/architecture-tutorial.test.ts",
+    "test:unit": "node --test tests/architecture-tutorial.test.ts tests/final-norm.test.ts",
     "test:e2e": "playwright test"
   },
   "dependencies": {
