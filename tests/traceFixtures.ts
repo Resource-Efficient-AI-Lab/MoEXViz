@@ -13,7 +13,7 @@ export function traceFor(model: Model): PromptFlow {
 /** Expected user-visible itinerary, independent of the step builder. */
 export function expectedStops(model: Model): string[] {
   return [
-    'what-is-moe', 'select-sample',
+    'what-is-moe',
     'embedding', 'embedding-detail', 'norm-attention', 'norm-attention-detail',
     'attention', 'attention-proj', ...(model === 'jetmoe' ? ['attention-route'] : []),
     'attention-map', 'attention-concat', 'residual-attention', 'residual-attention-detail',
@@ -24,13 +24,13 @@ export function expectedStops(model: Model): string[] {
   ];
 }
 
-/** Agreed numbering, including model-specific substeps and repetition at 9.2. */
+/** Agreed numbering, including model-specific substeps and repetition at 7.2. */
 export function expectedStepNumbers(model: Model): string[] {
   return [
-    '1', '2', '3', '3.1', '4', '4.1',
-    '5', '5.1', '5.2', '5.3', ...(model === 'jetmoe' ? ['5.4'] : []),
-    '6', '6.1', '7', '7.1',
-    '8', '8.1', '8.2', '8.3', '8.4', '8.5', ...(model === 'deepseek' ? ['8.6', '8.7', '8.8'] : []),
-    '9', '9.1', '9.2', '10', '10.1', '11', '11.1',
+    '0', '1', '1.1', '2', '2.1',
+    '3', '3.1', '3.2', '3.3', ...(model === 'jetmoe' ? ['3.4'] : []),
+    '4', '4.1', '5', '5.1',
+    '6', '6.1', '6.2', '6.3', '6.4', '6.5', ...(model === 'deepseek' ? ['6.6', '6.7', '6.8'] : []),
+    '7', '7.1', '7.2', '8', '8.1', '9', '9.1',
   ];
 }

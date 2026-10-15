@@ -467,7 +467,7 @@ export function ArchitectureTab({ visible, modelKey, loading, flow, promptIndex,
     const steps = buildTutorial(flow);
     const sameModel = previous.modelKey === modelKey;
     const previousId = previous.steps[previous.step]?.id;
-    const resume = !previous.flow ? 0 : !sameModel ? steps.findIndex((step) => step.id === 'select-sample')
+    const resume = !previous.flow ? 0 : !sameModel ? steps.findIndex((step) => step.id === 'what-is-moe')
       : Math.max(0, steps.findIndex((step) => step.id === previousId));
     const layer = sameModel ? Math.min(previous.layer, flow.num_layers - 1) : 0;
     const token = Math.max(0, Math.min(sameModel ? previous.token : flow.tokens.length - 1, flow.tokens.length - 1));
@@ -512,7 +512,7 @@ export function ArchitectureTab({ visible, modelKey, loading, flow, promptIndex,
 
   useEffect(() => {
     if (session.current.flow && session.current.modelKey !== modelKey) {
-      navigateTutorial(session.current.steps.findIndex((step) => step.id === 'select-sample'));
+      navigateTutorial(session.current.steps.findIndex((step) => step.id === 'what-is-moe'));
     }
   }, [modelKey, navigateTutorial]);
 
@@ -636,7 +636,7 @@ export function ArchitectureTab({ visible, modelKey, loading, flow, promptIndex,
 
   const tourCard = tutorialSteps[tourStep] ?? tutorialSteps[0];
   const mainStepCount = tutorialSteps.at(-1)!.mainStep;
-  const tourNumber = `${tourCard.mainStep}${tourCard.substep ? `.${tourCard.substep}` : ''}`;
+  const tourNumber = `${tourCard.mainStep}.${tourCard.substep || ''}`;
   const tokenLabel = flow.tokens[selectedToken]?.text.trim() || '(space)';
   const selectedRouting = flow.layers[currentLayer]?.tokens?.[selectedToken];
   const leadIndex = selectedRouting?.top_weights.reduce((best, weight, i, weights) => weight > weights[best] ? i : best, 0) ?? 0;
@@ -671,7 +671,7 @@ export function ArchitectureTab({ visible, modelKey, loading, flow, promptIndex,
         <div className="panel">
           <div className="flow-header">
             <div id="flow-block-label" className="flow-block-label"></div>
-            <button className="play-btn" id="start-tour-btn" type="button" onClick={resumeTutorial}>▶ Guided tour</button>
+            <button className="play-btn tour-primary-btn" id="start-tour-btn" type="button" onClick={resumeTutorial}>▶ Guided tour</button>
           </div>
 
           {/* The flow row. React renders the three blocks that do NOT depend on the current layer
@@ -708,21 +708,24 @@ export function ArchitectureTab({ visible, modelKey, loading, flow, promptIndex,
             <div className="tour-toolbar tour-drag-handle" title="Drag to move guided tour"
               onPointerDown={tourDrag.onPointerDown} onPointerMove={tourDrag.onPointerMove}
               onPointerUp={tourDrag.onPointerUp} onPointerCancel={tourDrag.onPointerUp}>
-            <div className="tour-step-label" id="tour-step-label">
-              Step {tourCard.mainStep} of {mainStepCount}{tourCard.view.kind !== 'intro' && ` · Transformer Block ${currentLayer + 1}`}
-            </div>
+              {tourCard.view.kind === 'intro'
+                ? <h3 id="tour-title" style={{ margin: 0 }}>{tourCard.title}</h3>
+                : <div className="tour-step-label" id="tour-step-label">
+                    Step {tourCard.mainStep} of {mainStepCount} · Transformer Block {currentLayer + 1}
+                  </div>}
               <span aria-hidden="true">⠿</span>
             </div>
-            <div className="tour-heading">
+            {tourCard.view.kind !== 'intro' && <div className="tour-heading">
               <h3 id="tour-title">{tourNumber} {tourCard.title}</h3>
-              <label className="tour-token-picker" hidden={tourCard.view.kind === 'intro'}>Token
+              <label className="tour-token-picker">Token
                 <select aria-label="Tutorial token" value={selectedToken} onChange={(ev) => chooseToken(Number(ev.target.value))}>
                   {flow.tokens.map((token, i) => <option key={i} value={i}>{i + 1}. {token.text.trim() || '(space)'}</option>)}
                 </select>
               </label>
-            </div>
+            </div>}
             <div className="tour-prose" aria-live="polite">
-              {tourCard.text && <p id="tour-text">{tourCard.text}</p>}
+              {tourCard.text && <p id="tour-text">{tourCard.text.split(/\*\*(.*?)\*\*/g).map((part, index) =>
+                index % 2 ? <strong key={index}>{part}</strong> : part)}</p>}
               {tourCard.id === 'router-single' && <p>{routerSummary}</p>}
               <div dangerouslySetInnerHTML={guideProse} />
             </div>
@@ -739,7 +742,7 @@ export function ArchitectureTab({ visible, modelKey, loading, flow, promptIndex,
                 ‹ Back
               </button>
               <button
-                className="play-btn"
+                className="play-btn tour-primary-btn"
                 id="tour-next-btn"
                 type="button"
                 disabled={loading || !!error}

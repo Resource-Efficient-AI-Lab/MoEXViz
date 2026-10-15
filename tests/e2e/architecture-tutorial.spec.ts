@@ -71,19 +71,19 @@ test('introductions keep the architecture visible and selection changes preserve
   await page.goto('');
   await at(page, 'what-is-moe');
   await expect(page.locator('#pdf-flow-row')).toBeVisible();
-  await expect(page.locator('.tour-step-label')).toHaveText('Step 1 of 11');
-  await expect(page.locator('#tour-title')).toHaveText('1 What is Mixture of Experts?');
-  await expect(page.locator('.tour-prose')).toContainText('not assigned subjects');
+  await expect(guide(page).locator('.tour-step-label')).toHaveCount(0);
+  await expect(guide(page).locator('.tour-toolbar #tour-title')).toHaveText('What is Mixture-of-Experts?');
+  await expect(guide(page).locator('#tour-title')).toHaveCount(1);
+  await expect(page.locator('#tour-title')).toHaveText('What is Mixture-of-Experts?');
+  await expect(page.locator('.tour-prose')).toContainText('Choose a model and sample prompt, or keep the current selections.');
   await expect(page.getByLabel('Tutorial token')).toBeHidden();
-  await expect(page.locator('.tour-prose')).toContainText('Attention lets each token gather context');
+  await expect(page.locator('#tour-text strong')).toHaveText(['Mixture of Experts (MoE)', 'feed-forward network (FFN)', 'experts', 'router', 'top-k', 'small subset of experts is active per token', 'sparse activation']);
   await page.screenshot({ path: testInfo.outputPath('introduction.png') });
-  await next(page, 'select-sample');
-  await checkNumbering(page, '2');
   await expect.poll(() => page.locator('#model-select').evaluate(el => getComputedStyle(el).animationName))
     .toBe(await page.evaluate(() => matchMedia('(prefers-reduced-motion: reduce)').matches) ? 'none' : 'sample-picker-pulse');
   await next(page, 'embedding');
-  await expect(page.locator('.tour-step-label')).toHaveText('Step 3 of 11 · Transformer Block 1');
-  await expect(page.locator('#tour-title')).toHaveText('3 Embedding');
+  await expect(page.locator('.tour-step-label')).toHaveText('Step 1 of 9 · Transformer Block 1');
+  await expect(page.locator('#tour-title')).toHaveText('1. Embedding');
   await advanceTo(page, 'attention-map');
   await page.locator('#prompt-select').selectOption('1');
   await at(page, 'attention-map');
@@ -97,16 +97,16 @@ test('introductions keep the architecture visible and selection changes preserve
     await route.continue();
   });
   await page.locator('#model-select').selectOption('jetmoe');
-  await at(page, 'select-sample');
+  await at(page, 'what-is-moe');
   await expect(page.locator('#tour-next-btn')).toBeDisabled();
   await expect(page.locator('#pdf-flow-row')).toBeVisible();
   await expect(page.locator('#math-backdrop')).toBeHidden();
   release();
   await expect(page.locator('#tour-next-btn')).toBeEnabled();
-  await at(page, 'select-sample');
+  await at(page, 'what-is-moe');
   await next(page, 'embedding');
   await advanceTo(page, 'attention-map');
-  await checkNumbering(page, '5.3');
+  await checkNumbering(page, '3.3');
   await page.locator('#prompt-select').selectOption('0');
   await expect(page.locator('#tour-next-btn')).toBeEnabled();
   await expect(page.locator('#prompt-text')).toContainText('The most popular');
@@ -159,8 +159,13 @@ async function at(page: Page, id: string) {
   await expect(page.locator('#tour-overlay')).toBeVisible();
 }
 async function checkNumbering(page: Page, number: string) {
-  await expect(page.locator('.tour-step-label')).toContainText(`Step ${number.split('.')[0]} of 11`);
-  await expect(page.locator('#tour-title')).toHaveText(new RegExp(`^${number.replace('.', '\\.')} `));
+  if (number === '0') {
+    await expect(page.locator('#tour-title')).toHaveText('What is Mixture-of-Experts?');
+    return;
+  }
+  await expect(guide(page).locator('.tour-step-label')).toContainText(`Step ${number.split('.')[0]} of 9`);
+  const titleNumber = number.includes('.') ? number : `${number}.`;
+  await expect(guide(page).locator('#tour-title')).toHaveText(new RegExp(`^${titleNumber.replaceAll('.', '\\.')} `));
 }
 async function next(page: Page, id: string) {
   await page.locator('#tour-next-btn').click();
@@ -199,7 +204,7 @@ async function checkLayout(page: Page) {
   expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(viewport.height);
 }
 async function checkView(page: Page, id: string) {
-  const overview = ['what-is-moe', 'select-sample', 'embedding', 'norm-attention', 'attention', 'residual-attention', 'norm-ffn', 'dense', 'moe', 'residual-ffn', 'repeat', 'final-norm', 'final-output'].includes(id);
+  const overview = ['what-is-moe', 'embedding', 'norm-attention', 'attention', 'residual-attention', 'norm-ffn', 'dense', 'moe', 'residual-ffn', 'repeat', 'final-norm', 'final-output'].includes(id);
   const router = id.startsWith('router-'), expert = id.startsWith('expert-');
   if (overview || router) await expect(page.locator('#math-backdrop')).toBeHidden();
   else await expect(page.locator('#math-backdrop')).toBeVisible();
@@ -343,12 +348,12 @@ for (const model of ['olmoe', 'jetmoe', 'deepseek'] as Model[]) {
     await advanceTo(page, 'attention-proj');
     await page.locator('[data-atab="map"]').click();
     await at(page, 'attention-map');
-    await checkNumbering(page, model === 'jetmoe' ? '5.3' : '5.2');
+    await checkNumbering(page, model === 'jetmoe' ? '3.3' : '3.2');
     await page.locator('#pdf-head-next').click();
     await at(page, 'attention-map');
     await page.locator('#math-modal-close').click();
     await at(page, 'attention');
-    await checkNumbering(page, '5');
+    await checkNumbering(page, '3');
     await next(page, 'attention-proj');
     await page.keyboard.press('Escape');
     await at(page, 'attention');
@@ -373,12 +378,12 @@ for (const model of ['olmoe', 'jetmoe', 'deepseek'] as Model[]) {
     if (model === 'deepseek') {
       await page.locator('#moe-grid-backdrop .layer-tab').first().click();
       await at(page, 'dense');
-      await checkNumbering(page, '8');
+      await checkNumbering(page, '6');
       await expect(page.locator('#moe-grid-backdrop')).toBeHidden();
       await next(page, 'dense-detail');
-      await checkNumbering(page, '8.1');
+      await checkNumbering(page, '6.1');
       await next(page, 'moe');
-      await checkNumbering(page, '8.2');
+      await checkNumbering(page, '6.2');
       await expect(page.locator('#flow-block-label .title')).toHaveText(`Transformer Block 2 of ${flow.num_layers}`);
     } else {
       await page.locator('#moe-grid-close').click();
@@ -428,7 +433,7 @@ test('manual operation detours, inactive experts and model reset', async ({ page
   await expect(page.locator('.conceptual-norm')).toBeVisible();
   await page.locator('#math-modal-close').click();
   await page.locator('#model-select').selectOption('jetmoe');
-  await at(page, 'select-sample');
+  await at(page, 'what-is-moe');
   await expect(page.locator('#math-backdrop')).toBeHidden();
   await expect(page.locator('#flow-block-label .title')).toHaveText('Transformer Block 1 of 24');
 });

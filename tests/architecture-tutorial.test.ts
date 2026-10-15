@@ -19,19 +19,23 @@ for (const model of ['olmoe', 'jetmoe', 'deepseek'] as Model[]) {
     assert.deepEqual([...new Set(steps.map((step) => step.block))], [null, 0, 1, 2, 3, 4, 5, 6, 7, 8]);
   });
 
-  test(`${model}: every view belongs to the agreed eleven main steps`, () => {
+  test(`${model}: an unnumbered introduction precedes nine main flow steps`, () => {
     const steps = buildTutorial(traceFor(model));
     assert.deepEqual(steps.map((step) => `${step.mainStep}${step.substep ? `.${step.substep}` : ''}`), expectedStepNumbers(model));
     assert.deepEqual(steps.filter((step) => step.substep === 0).map((step) => step.id), [
-      'what-is-moe', 'select-sample', 'embedding', 'norm-attention', 'attention',
+      'what-is-moe', 'embedding', 'norm-attention', 'attention',
       'residual-attention', 'norm-ffn', model === 'deepseek' ? 'dense' : 'moe',
       'residual-ffn', 'final-norm', 'final-output',
     ]);
+    assert.equal(steps.at(-1)!.mainStep, 9);
     const introduction = steps[0];
-    assert.equal(introduction.title, 'What is Mixture of Experts?');
-    assert.match(introduction.text, /not assigned subjects/);
-    assert.match(introduction.text, /Attention lets each token gather context/);
-    assert.match(introduction.text, /outputs are combined using the router’s weights/);
+    assert.equal(introduction.mainStep, 0);
+    assert.equal(steps[1].mainStep, 1);
+    assert.equal(steps[1].id, 'embedding');
+    assert.equal(introduction.title, 'What is Mixture-of-Experts?');
+    assert.match(introduction.text, /Choose a model and sample prompt, or keep the current selections/);
+    assert.match(introduction.text, /\*\*feed-forward network \(FFN\)\*\*/);
+    assert.match(introduction.text, /outputs of the selected experts are combined, weighted by their router scores/);
   });
 }
 
