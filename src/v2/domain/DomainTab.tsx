@@ -771,20 +771,7 @@ export function DomainTab({
         >
           <div className="flex items-start justify-between gap-3">
             <h3>{DOMAIN_TOUR_STEPS[tourStep].title}</h3>
-            {/* Same as "Exit tour" below — a corner ✕ so closing is where readers look for it. */}
-            <button
-              type="button"
-              aria-label="Close tour"
-              className="-mt-1 shrink-0 rounded-sm p-1 font-body text-sm text-muted hover:bg-surface hover:text-ink"
-              onClick={() => {
-                clearTourTimeout();
-                setTourGhost(null);
-                setTourBusy(false);
-                setTourOpen(false);
-              }}
-            >
-              ✕
-            </button>
+            <span aria-hidden="true" title="Drag to move guided tour">⠿</span>
           </div>
           <p>
             {tourStep === 0 && umapAnalysis
