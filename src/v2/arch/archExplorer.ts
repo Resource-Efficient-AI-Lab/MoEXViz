@@ -31,7 +31,7 @@ import {
   ATTN_STEPS_MHA, ATTN_STEPS_MOA, TRANSPOSE_NOTE,
   attnMapGrid, attnPanel, attnSubTabBar, beat, buildAttnGridHTML, buildGridHTML,
   buildHeadStripHTML, buildMaskGridHTML, buildStripHTML, diagramGrid, diagramRow, dotPhrase,
-  escapeHtml, expertStripWithNumbers, fitCellPx, mapFootnote, matBlock, opSpan, padGridRows, resultBlock,
+  enlargedMatBlock, escapeHtml, expertStripWithNumbers, fitCellPx, mapFootnote, matBlock, opSpan, padGridRows, resultBlock,
   stageTitleBar, stagedCls, stagedRoot, wDims,
 } from './mathDiagram';
 
@@ -607,9 +607,9 @@ export function bootArchExplorer(
     html += diagramRow([
       matBlock('hidden state h', '(1, ' + H + ')', stripHTML(hVec, 5)),
       opSpan('·'),
-      matBlock('W_router', wDims(E, H), gridHTML(routerGrid, 5)),
+      enlargedMatBlock('W_router', wDims(E, H), gridHTML(routerGrid, 5)),
       opSpan('='),
-      matBlock('D = Softmax Output', '(1, ' + E + ')', expertStripWithNumbers(tokenColor(ti), tt.all_probs, tt.top_experts, 8, 22)),
+      enlargedMatBlock('D = Softmax Output', '(1, ' + E + ')', expertStripWithNumbers(tokenColor(ti), tt.all_probs, tt.top_experts, 8, 22)),
     ], { nowrap: true });
     // The summation indexes the STORED matrix by (row = expert, col = dim), so it carries no ᵀ —
     // unlike the diagram above it, which is a matmul. See wDims / TRANSPOSE_NOTE.
@@ -1675,11 +1675,11 @@ export function bootArchExplorer(
     const dims = '(' + before.length + ', ' + DATA.hidden_size + ')';
     return '<div class="math-block"><h3>' + title + '</h3>' +
       diagramRow([
-        matBlock('x (before)', dims, gridHTML(before, 5)),
+        enlargedMatBlock('x (before)', dims, gridHTML(before, 5)),
         opSpan('→ ÷ RMS → ⊙'),
         matBlock('weight γ', '(' + DATA.hidden_size + ',)', stripHTML(weight, 5)),
         opSpan('='),
-        matBlock('normalized stream', dims, gridHTML(after, 5)),
+        enlargedMatBlock('normalized stream', dims, gridHTML(after, 5)),
       ]) +
       '<div class="math-eq wrap">y = x / sqrt(mean(x²) + ε) ⊙ γ' + (note ? ' &nbsp;<span class="op">— ' + note + '</span>' : '') + '</div>' +
       '<p class="math-hint" style="margin:8px 0 0">' +
@@ -1816,7 +1816,22 @@ export function bootArchExplorer(
     const panels = [...document.querySelectorAll('#math-content .math-subtab-panel[id^="attn-subtab-"]')] as HTMLElement[];
     return panels.find((p) => p.style.display !== 'none') || null;
   }
+  // Keep the original tracks and centers. Consume only the empty space inside a column and
+  // its gaps, leaving 3px before the next column so artwork cannot cover an operator.
+  // offsetWidth ignores the reveal transforms that may already be on an operand.
+  function fitEnlargedArtwork() {
+    document.querySelectorAll<HTMLElement>('#math-content .mm-enlarged-art').forEach((art) => {
+      const operand = art.closest<HTMLElement>('.mm-operand');
+      const equation = art.closest<HTMLElement>('.mm-equation');
+      if (!operand || !equation || !art.offsetWidth) return;
+      const gap = parseFloat(getComputedStyle(equation).columnGap) || 0;
+      const available = operand.offsetWidth + 2 * Math.max(0, gap - 3);
+      art.style.setProperty('--mm-art-scale-x', String(Math.max(1, Math.min(1.2, available / art.offsetWidth))));
+    });
+  }
+
   function playAttnStep() {
+    fitEnlargedArtwork();
     killAttnTimeline();
     const panel = visibleAttnPanel();
     if (!panel) return;
@@ -1994,6 +2009,7 @@ export function bootArchExplorer(
     }) || null;
   }
   function playStageReveal() {
+    fitEnlargedArtwork();
     const root = visibleStagedRoot();
     if (!root) return;
     killAttnTimeline();
@@ -2177,19 +2193,19 @@ export function bootArchExplorer(
         // closes up — the tags name elements, not columns.
         const rawSplit = (label: string, raw: number[][] | undefined, cols: number) =>
           showRawMoa && raw
-            ? [beat('eq', opSpan('=')), beat('raw', matBlock(label, '(' + numTokens + ',' + cols + ')', gridHTML(raw, 4))), beat('split', opSpan('→split→'))]
+            ? [beat('eq', opSpan('=')), beat('raw', enlargedMatBlock(label, '(' + numTokens + ',' + cols + ')', gridHTML(raw, 4))), beat('split', opSpan('→split→'))]
             : [beat('split', opSpan('→split→'))];
         // Column-aligned like the MHA branch's step 1 (2026-08-01, by request): the three rows share
         // one schema — stream · W = raw →split→ head [rotate head] — and V, which takes no RoPE, gets
         // its two trailing columns padded by `padGridRows` instead of centring itself out of line.
         const moaProjGrid = padGridRows([
-          [beat('stream', matBlock('normalized stream', '(' + numTokens + ',' + H + ')', gridHTML(lf.ln1_out, 4))), beat('mul', opSpan('·')), beat('wmat', matBlock('W_q (expert ' + (E + 1) + ')', '(' + H + ',' + H + ')', gridHTML(aew.q, 5)))]
+          [beat('stream', enlargedMatBlock('normalized stream', '(' + numTokens + ',' + H + ')', gridHTML(lf.ln1_out, 4))), beat('mul', opSpan('·')), beat('wmat', enlargedMatBlock('W_q (expert ' + (E + 1) + ')', '(' + H + ',' + H + ')', gridHTML(aew.q, 5)))]
             .concat(rawSplit('Q raw (expert ' + (E + 1) + ')', aef.q_raw, nh * hd))
             .concat([beat('head', matBlock('Q head ' + (flowHead + 1) + ' (pre-RoPE)', '(' + numTokens + ',' + hd + ')', gridHTML(aef.q_by_head_prerope[flowHead], headCell))), beat('rope', opSpan('rotate (RoPE) →')), beat('headpost', matBlock('Q head ' + (flowHead + 1) + ' (post-RoPE)', '(' + numTokens + ',' + hd + ')', gridHTML(aef.q_by_head[flowHead], headCell)))]),
-          [beat('stream', matBlock('normalized stream', '(' + numTokens + ',' + H + ')', gridHTML(lf.ln1_out, 4))), beat('mul', opSpan('·')), beat('wmat', matBlock('W_k (shared)', '(' + H + ',' + H + ')', gridHTML(lf.k_weight, 5)))]
+          [beat('stream', enlargedMatBlock('normalized stream', '(' + numTokens + ',' + H + ')', gridHTML(lf.ln1_out, 4))), beat('mul', opSpan('·')), beat('wmat', enlargedMatBlock('W_k (shared)', '(' + H + ',' + H + ')', gridHTML(lf.k_weight, 5)))]
             .concat(rawSplit('K raw (shared)', lf.k_raw, nkvH * hd))
             .concat([beat('head', matBlock('K head ' + (flowHead + 1) + ' (pre-RoPE)', '(' + numTokens + ',' + hd + ')', gridHTML(lf.k_by_head_prerope[flowHead], headCell))), beat('rope', opSpan('rotate (RoPE) →')), beat('headpost', matBlock('K head ' + (flowHead + 1) + ' (post-RoPE)', '(' + numTokens + ',' + hd + ')', gridHTML(lf.k_by_head[flowHead], headCell)))]),
-          [beat('stream', matBlock('normalized stream', '(' + numTokens + ',' + H + ')', gridHTML(lf.ln1_out, 4))), beat('mul', opSpan('·')), beat('wmat', matBlock('W_v (shared)', '(' + H + ',' + H + ')', gridHTML(lf.v_weight, 5)))]
+          [beat('stream', enlargedMatBlock('normalized stream', '(' + numTokens + ',' + H + ')', gridHTML(lf.ln1_out, 4))), beat('mul', opSpan('·')), beat('wmat', enlargedMatBlock('W_v (shared)', '(' + H + ',' + H + ')', gridHTML(lf.v_weight, 5)))]
             .concat(rawSplit('V raw (shared)', lf.v_raw, nkvH * hd))
             .concat([beat('head', matBlock('V head ' + (flowHead + 1), '(' + numTokens + ',' + hd + ')', gridHTML(lf.v_by_head[flowHead], headCell)))]),
         ]);
@@ -2424,11 +2440,11 @@ export function bootArchExplorer(
         // elements, not columns, so a row that skips a step (V takes no norm and no RoPE) just has
         // no element in that beat, and a trace without the raw intermediates drops the beat entirely.
         const cells: string[] = [
-          beat('stream', matBlock(NORM_STREAM, '(' + numTokens + ',' + H + ')', gridHTML(lf.ln1_out, 4))), beat('mul', opSpan('·')),
-          beat('wmat', matBlock('W_' + name.toLowerCase(), '(' + H + ',' + H + ')', gridHTML(W, 5))),
+          beat('stream', enlargedMatBlock(NORM_STREAM, '(' + numTokens + ',' + H + ')', gridHTML(lf.ln1_out, 4))), beat('mul', opSpan('·')),
+          beat('wmat', enlargedMatBlock('W_' + name.toLowerCase(), '(' + H + ',' + H + ')', gridHTML(W, 5))),
         ];
         if (showRaw && raw) {
-          cells.push(beat('eq', opSpan('=')), beat('raw', matBlock(name + ' raw', '(' + numTokens + ',' + H + ')', gridHTML(raw, 4))));
+          cells.push(beat('eq', opSpan('=')), beat('raw', enlargedMatBlock(name + ' raw', '(' + numTokens + ',' + H + ')', gridHTML(raw, 4))));
           // A row without a norm (V) does NOT reserve the two norm columns as blanks — it closes up,
           // so its `→split→` follows `V raw` directly and the trailing blanks all land at the end of
           // the row (2026-08-01, by request). Reserving them put a two-column hole between V raw and
@@ -2436,7 +2452,7 @@ export function bootArchExplorer(
           // consequence to expect: V's split/head sit under Q's `→norm→`/`Q normed`, i.e. the columns
           // only line up as far as the operation is genuinely shared.
           if (normCols && normed) {
-            cells.push(beat('normop', opSpan('→norm→')), beat('normed', matBlock(name + ' normed', '(' + numTokens + ',' + H + ')', gridHTML(normed, 4))));
+            cells.push(beat('normop', opSpan('→norm→')), beat('normed', enlargedMatBlock(name + ' normed', '(' + numTokens + ',' + H + ')', gridHTML(normed, 4))));
           }
           cells.push(beat('split', opSpan('→split→')));
         } else {
@@ -2530,7 +2546,7 @@ export function bootArchExplorer(
       title = 'Residual Add (post-attention) · all ' + numTokens + ' tokens · layer ' + (li + 1);
       headerExtra = stageTitleBar('Residual (Post-attention)');
       html = '<div class="math-block"><h3>Add attention output back to the residual stream</h3>' +
-        diagramRow([matBlock('residual (pre-norm input)', allDims, gridHTML(beforeAll, 5)), opSpan('+'), matBlock('attention output', allDims, gridHTML(lf.attn_output, 5)), opSpan('='), matBlock('sum', allDims, gridHTML(lf.after_attn_residual, 5))]) +
+        diagramRow([enlargedMatBlock('residual (pre-norm input)', allDims, gridHTML(beforeAll, 5)), opSpan('+'), enlargedMatBlock('attention output', allDims, gridHTML(lf.attn_output, 5)), opSpan('='), enlargedMatBlock('sum', allDims, gridHTML(lf.after_attn_residual, 5))]) +
         '<p class="math-hint" style="margin:8px 0 0">One row per token, added position by position: no row affects any other. This is the skip connection, and the reason it is called a "residual" one: attention adds onto the stream it read instead of replacing it, so information from earlier layers is never fully discarded.</p></div>';
     } else if (stageKey === 'ln2') {
       // One `const` for both the title and the header title, so the two can't drift apart on a
@@ -2637,7 +2653,7 @@ export function bootArchExplorer(
       // every build, so it tracks the Router pager and ▶ Step-through as well as a block click.
       const lastLayer = li === DATA.num_layers - 1;
       html = '<div class="math-block"><h3>Add ' + feedLabel + ' back to the residual stream</h3>' +
-        diagramRow([matBlock('residual (post-attention)', allDims, gridHTML(lf.after_attn_residual, 5)), opSpan('+'), matBlock(feedLabel, allDims, gridHTML(lf.moe_output, 5)), opSpan('='), matBlock('layer output', allDims, gridHTML(lf.layer_output, 5))]) +
+        diagramRow([enlargedMatBlock('residual (post-attention)', allDims, gridHTML(lf.after_attn_residual, 5)), opSpan('+'), enlargedMatBlock(feedLabel, allDims, gridHTML(lf.moe_output, 5)), opSpan('='), enlargedMatBlock('layer output', allDims, gridHTML(lf.layer_output, 5))]) +
         '<p class="math-hint" style="margin:8px 0 0">One row per token, added position by position. This sum is the layer\'s output, and ' + (lastLayer
           ? 'this is the last layer: the final RMSNorm and the LM head come next.'
           : 'it is what layer ' + (li + 2) + ' reads as its residual stream.') + '</p></div>';
