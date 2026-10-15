@@ -191,7 +191,7 @@ export const mapFootnote = (prose: string) =>
 // 16 per-head slices side by side: what "concatenate the heads" actually produces. Each head keeps
 // its own ramp normalization (as everywhere else in this modal), so a quiet head stays legible.
 export function buildHeadStripHTML(ramp: Ramp, heads: number[][][], cellPx: number) {
-  return '<div style="display:flex;gap:3px;align-items:flex-end;flex-wrap:wrap;justify-content:center;max-width:100%;">' +
+  return '<div style="display:flex;gap:3px;align-items:center;flex-wrap:wrap;justify-content:center;max-width:100%;">' +
     heads.map((h) => buildGridHTML(ramp, h, cellPx)).join('') + '</div>';
 }
 export function buildStripHTML(ramp: Ramp, vec: number[], cw: number) {
@@ -207,28 +207,22 @@ export function buildStripHTML(ramp: Ramp, vec: number[], cw: number) {
 }
 export function matBlock(title: string, dimLabel: string, inner: string, big?: boolean) {
   const titleSz = big ? '14px' : '11px', dimSz = big ? '12px' : '10px';
-  return '<div style="text-align:center;">' +
-    '<div style="font-size:' + titleSz + ';color:var(--text-secondary);margin-bottom:' + (big ? '7px' : '5px') + ';">' + title + '</div>' +
-    inner +
-    '<div style="font-size:' + dimSz + ';color:var(--text-muted);margin-top:' + (big ? '7px' : '5px') + ';font-variant-numeric:tabular-nums;">' + dimLabel + '</div>' +
+  return '<div class="mm-operand" style="text-align:center;">' +
+    '<div class="mm-label" style="font-size:' + titleSz + ';color:var(--text-secondary);margin-bottom:' + (big ? '7px' : '5px') + ';">' + (inner ? title : '') + '</div>' +
+    '<div class="mm-visual">' + (inner || '<span style="font-size:' + titleSz + ';color:var(--text-secondary);">' + title + '</span>') + '</div>' +
+    '<div class="mm-dim" style="font-size:' + dimSz + ';color:var(--text-muted);margin-top:' + (big ? '7px' : '5px') + ';font-variant-numeric:tabular-nums;">' + dimLabel + '</div>' +
     '</div>';
 }
-export function resultBlock(title: string, dimLabel: string, inner: string, big?: boolean) {
+export function resultBlock(title: string, dimLabel: string, inner: string, big?: boolean, revealLast?: boolean) {
   const titleSz = big ? '14px' : '11px', dimSz = big ? '12px' : '10px', pad = big ? '12px 16px' : '8px 12px';
-  return '<div style="text-align:center;background:color-mix(in srgb, var(--seq-500) 8%, var(--surface-1));border:1.5px solid var(--seq-500);border-radius:10px;padding:' + pad + ';">' +
-    '<div style="font-size:' + titleSz + ';font-weight:750;color:var(--seq-500);margin-bottom:' + (big ? '7px' : '5px') + ';">' + title + '</div>' +
-    inner +
-    '<div style="font-size:' + dimSz + ';color:var(--text-muted);margin-top:' + (big ? '7px' : '5px') + ';font-variant-numeric:tabular-nums;">' + dimLabel + '</div>' +
+  return '<div class="mm-operand"' + (revealLast ? ' data-reveal-last' : '') + ' style="text-align:center;background:color-mix(in srgb, var(--seq-500) 8%, var(--surface-1));border:1.5px solid var(--seq-500);border-radius:10px;padding:' + pad + ';">' +
+    '<div class="mm-label" style="font-size:' + titleSz + ';font-weight:750;color:var(--seq-500);margin-bottom:' + (big ? '7px' : '5px') + ';">' + (inner ? title : '') + '</div>' +
+    '<div class="mm-visual">' + (inner || '<span style="font-size:' + titleSz + ';font-weight:750;color:var(--seq-500);">' + title + '</span>') + '</div>' +
+    '<div class="mm-dim" style="font-size:' + dimSz + ';color:var(--text-muted);margin-top:' + (big ? '7px' : '5px') + ';font-variant-numeric:tabular-nums;">' + dimLabel + '</div>' +
     '</div>';
 }
-/** The multiplication dot is the one operator that does not survive the operator body size: `·` is
- *  roughly 0.12em of ink, so at 17px it paints a ~2px speck and a pair of operands reads as two
- *  grids sitting side by side rather than as a product. Every other operator here is a word
- *  (`→ softmax →`) or a full-height glyph (`=`, `+`, `×`), so only this one needs the bump — and it
- *  is applied BY SYMBOL inside `opSpan`, never per call site, so no diagram in these modals can be
- *  left with the small dot. `line-height:1` comes with it: `align-self:center` would still centre a
- *  taller line box, but in the `flex-end` rows (`diagramRow`'s default) a taller operator raises the
- *  row's own height and lifts every operand off the bottom edge they align to. */
+/** Enlarge multiplication dots so they remain legible beside the matrix textures.
+ * The shared graphic track handles vertical placement; operators need no baseline offsets. */
 const DOT_PX = 34, DOT_PX_BIG = 44;
 /** Same enlargement for a `·` that opens a longer operator phrase, where `opSpan` cannot scale the
  *  string without blowing up the words beside it. The phrase becomes an inline-flex row so
@@ -242,11 +236,11 @@ export function dotPhrase(rest: string, big?: boolean) {
     '<span style="font-size:' + (big ? DOT_PX_BIG : DOT_PX) + 'px;line-height:1;">·</span>' +
     '<span>' + rest + '</span></span>';
 }
-export function opSpan(sym: string, big?: boolean, noOffset?: boolean) {
+export function opSpan(sym: string, big?: boolean, _noOffset?: boolean) {
   const isDot = sym === '·';
   const size = big ? (isDot ? DOT_PX_BIG : 22) : (isDot ? DOT_PX : 17);
-  return '<div style="font-size:' + size + 'px;' + (isDot ? 'line-height:1;' : '') +
-    'color:var(--text-muted);align-self:center;' + (noOffset ? '' : 'padding-bottom:' + (big ? '20px' : '16px') + ';') + '">' + sym + '</div>';
+  return '<div class="mm-operator" style="font-size:' + size + 'px;line-height:1;color:var(--text-muted);">' +
+    '<span class="mm-symbol">' + sym + '</span></div>';
 }
 
 /** Every weight grid in these modals is drawn in PyTorch's stored `(out, in)` layout — that is the
@@ -267,13 +261,18 @@ export const TRANSPOSE_NOTE = 'Weights are shown in PyTorch’s stored <b>(out, 
 /** `data-diagram` on both containers below is what `playStageReveal` walks (archExplorer.ts): its
  *  DIRECT CHILDREN are the beats, in DOM order, which is reading order at both call sites.
  *  `diagramRow` needs no `data-cols` — every child is its own beat. See `stagedRoot`. */
-export function diagramRow(blocks: string[], opts?: { nowrap?: boolean; align?: 'flex-end' | 'center' }) {
-  const nowrap = opts && opts.nowrap;
-  const align = (opts && opts.align) || 'flex-end';
-  const style = nowrap
-    ? 'display:flex;align-items:' + align + ';gap:8px;flex-wrap:nowrap;overflow-x:auto;justify-content:flex-start;margin:8px 0 12px;'
-    : 'display:flex;align-items:' + align + ';gap:8px;flex-wrap:wrap;justify-content:center;margin:8px 0 12px;';
-  return '<div data-diagram style="' + style + '">' + blocks.join('') + '</div>';
+export function diagramRow(blocks: string[], _opts?: { nowrap?: boolean; align?: 'flex-end' | 'center' }) {
+  // Keep each complete equation together and scroll locally when it exceeds the popup width.
+  return '<div class="mm-diagram-scroll"><div data-diagram class="mm-equation mm-equation-row">' + blocks.join('') + '</div></div>';
+}
+
+/** Keep the direct children and their DOM order intact: reveal timelines address them as beats.
+ * Each equation row shares three tracks (title / graphic / dimensions), independent of labels. */
+function positionDiagramBlock(html: string, column: number, row: number) {
+  const end = html.indexOf('>');
+  const tag = html.slice(0, end);
+  const position = 'grid-column:' + column + ';grid-row:' + row + ' / span 3;';
+  return (tag.includes('style="') ? tag.replace('style="', 'style="' + position) : tag + ' style="' + position + '"') + html.slice(end);
 }
 // A multi-row diagram where every row shares the same N columns, so operands/operators/results
 // line up vertically row-to-row instead of each row independently centering its own content.
@@ -281,16 +280,15 @@ export function diagramGrid(rows: string[][], cols: number, opts?: { big?: boole
   const big = opts && opts.big;
   const colGap = opts && opts.colGap != null ? opts.colGap : (big ? 22 : 16);
   const rowGap = opts && opts.rowGap != null ? opts.rowGap : (big ? 28 : 20);
-  const ml = opts && opts.center ? 'auto' : '0';
   // `data-cols` is what makes `playStageReveal` group this grid BY COLUMN rather than child by
   // child: children land row-major below, so child i sits in column i % cols, and one column is one
   // beat. That is the same grouping the Attention `proj` step gets by hand — its Q/K/V rows share
   // the `stream`/`mul`/`wmat` beat keys — so a 3×5 SwiGLU grid reads as 5 steps, not 15.
-  let html = '<div data-diagram data-cols="' + cols + '" style="margin-left:' + ml + ';margin-right:auto;width:fit-content;max-width:100%;' +
-    'display:grid;grid-template-columns:repeat(' + cols + ',auto);align-items:end;' +
-    'column-gap:' + colGap + 'px;row-gap:' + rowGap + 'px;padding:6px 0 10px;">';
-  rows.forEach((row) => { html += row.join(''); });
-  html += '</div>';
+  let html = '<div class="mm-diagram-scroll"><div data-diagram class="mm-equation" data-cols="' + cols + '" style="' +
+    'grid-template-columns:repeat(' + cols + ',max-content);grid-template-rows:' + rows.map(() => 'auto auto auto').join(' ' + rowGap + 'px ') + ';' +
+    'column-gap:' + colGap + 'px;">';
+  rows.forEach((row, r) => { row.forEach((block, c) => { html += positionDiagramBlock(block, c + 1, r * 4 + 1); }); });
+  html += '</div></div>';
   return html;
 }
 /** A cell that holds a column open without drawing anything — a grid places children in order, so
@@ -325,13 +323,11 @@ export function padGridRows(rows: string[][]) {
  *    that element is `overflow-x:auto` too, and scrolling it drags the header and the step
  *    sub-tab bar off screen. Widest case in the corpus is JetMoE's 17-token prompt. */
 export function attnMapGrid(leadA: string[], midA: string, tailA: string[], midB: string, tailB: string[]) {
-  const cell = (items: string[]) => '<div style="display:flex;align-items:center;gap:8px;">' + items.join('') + '</div>';
-  return '<div style="max-width:100%;overflow-x:auto;display:flex;justify-content:safe center;margin:8px 0 12px;">' +
-    '<div style="flex:0 0 auto;display:grid;grid-template-columns:auto auto auto;' +
-    'align-items:center;column-gap:8px;row-gap:12px;">' +
-    cell(leadA) + midA + cell(tailA) +
-    GRID_BLANK + midB + cell(tailB) +
-    '</div></div>';
+  const cell = (items: string[]) => '<div class="mm-equation-group">' + items.join('') + '</div>';
+  const rows = [[cell(leadA), midA, cell(tailA)], [GRID_BLANK, midB, cell(tailB)]];
+  // No data-diagram here: attention's named beats live inside the grouped cells.
+  return '<div class="mm-diagram-scroll"><div class="mm-equation" style="grid-template-columns:repeat(3,max-content);grid-template-rows:auto auto auto 12px auto auto auto;column-gap:8px;">' +
+    rows.map((row, r) => row.map((block, c) => positionDiagramBlock(block, c + 1, r * 4 + 1)).join('')).join('') + '</div></div>';
 }
 /** Tags one diagram cell with the beat it belongs to in the Attention step-1 reveal (see
  *  `playAttnStep`). `matBlock`/`opSpan` each return a single outer `<div …>`, so the attribute

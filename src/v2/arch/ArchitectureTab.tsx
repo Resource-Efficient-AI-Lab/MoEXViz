@@ -10,6 +10,7 @@ import { buildTutorial, feedForwardOverview, supportsTutorialView, tutorialViewM
 import { buildParamCountPanelHtml } from './paramPanel';
 import type { PromptFlow } from './types';
 import type { ArchModelKey } from './models';
+import { useDraggable } from '../useDraggable';
 
 /** The same union archExplorer takes as its height-regime argument — aliased rather than restated
  *  so the two can never drift into disagreeing about the sub-tab names. */
@@ -118,7 +119,13 @@ export function ArchitectureTab({ visible, modelKey, loading, flow, promptIndex,
     phaseLayers: { initial: 0, routed: 0, final: 0 } as Record<TutorialPhase, number>,
   });
   const architectureRef = useRef<HTMLDivElement>(null);
-  const dockRef = useRef<HTMLDivElement>(null);
+  const parameterRef = useRef<HTMLDivElement>(null);
+  const tourDrag = useDraggable();
+  const mathDrag = useDraggable();
+  const routerDrag = useDraggable();
+  const resetMathPosition = mathDrag.reset;
+  const resetRouterPosition = routerDrag.reset;
+  const resetTourPosition = tourDrag.reset;
   const [guideProse, setGuideProse] = useState({ __html: '' });
   // The Per-token tab's beat replay, published upward so ▶ Replay routing can live in the shared
   // layer row next to its All-tokens twin. Null = nothing to replay (reduced motion / dense layer).
@@ -142,12 +149,20 @@ export function ArchitectureTab({ visible, modelKey, loading, flow, promptIndex,
 
   // ---- persistent guided tour: React owns the current step ----
   const [tourStep, setTourStep] = useState(0);
-  const [tourExpanded, setTourExpanded] = useState(false);
+  const [tourOpen, setTourOpen] = useState(true);
 
   // ---- the shared math modal: React owns whether it is open and which stage is showing ----
   // The stage's CONTENT is still built by archExplorer's string builders; React only commits it.
   const [mathStage, setMathStage] = useState<MathStage | null>(null);
   const stageSeq = useRef(0);
+  const computationOpen = mathStage !== null;
+
+  useEffect(() => {
+    if (!computationOpen || !visible) resetMathPosition();
+  }, [computationOpen, visible, resetMathPosition]);
+  useEffect(() => {
+    if (!routerVisible || !visible) resetRouterPosition();
+  }, [routerVisible, visible, resetRouterPosition]);
 
   const syncGuide = useCallback((view: TutorialView) => {
     const s = session.current;
@@ -319,9 +334,10 @@ export function ArchitectureTab({ visible, modelKey, loading, flow, promptIndex,
   const bodyHtml = useMemo(() => ({ __html: mathStage ? mathStage.payload.html : '' }), [mathStage]);
   const headerHtml = useMemo(() => ({ __html: mathStage ? mathStage.payload.headerExtra : '' }), [mathStage]);
 
-  // Reserve the entire dock, including both stacked cards on narrow screens.
+  // Fit the diagram above the content-sized parameter panel. The floating tour does not
+  // consume layout space or change diagram size when dragged or dismissed.
   useEffect(() => {
-    const root = architectureRef.current, card = dockRef.current;
+    const root = architectureRef.current, card = parameterRef.current;
     if (!flow || !visible || !root || !card) return;
     const viewport = root.querySelector<HTMLElement>('.flow-viewport')!;
     const diagram = root.querySelector<HTMLElement>('.pdf-scroll')!;
@@ -331,18 +347,14 @@ export function ArchitectureTab({ visible, modelKey, loading, flow, promptIndex,
       if (disposed) return;
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
-        const dockHeight = Math.ceil(card.getBoundingClientRect().height);
-        root.style.setProperty('--tour-reserved', `${dockHeight}px`);
         // Keep the diagram's natural layout readable, then scale the whole illustration,
         // including the residual and loop-back lanes, into the remaining viewport.
         const width = Math.max(1100, viewport.clientWidth);
         diagram.style.width = `${width}px`;
         const height = diagram.offsetHeight;
         const top = viewport.getBoundingClientRect().top + window.scrollY;
-        const dockTop = card.getBoundingClientRect().top;
-        // Leave room for the panel's lower padding/border and a gap above the dock.
-        // Measure from the document origin so scrolling never changes the fitted size.
-        const available = Math.max(1, dockTop - top - 20);
+        // Include the two panels' margins, lower padding, page padding and rounding slack.
+        const available = Math.max(1, window.innerHeight - top - Math.ceil(card.getBoundingClientRect().height) - 56);
         const scale = Math.min(1, viewport.clientWidth / width, available / height);
         diagram.style.transform = `scale(${scale})`;
         diagram.style.setProperty('--flow-scale', String(scale));
@@ -365,7 +377,6 @@ export function ArchitectureTab({ visible, modelKey, loading, flow, promptIndex,
       disposed = true;
       observer.disconnect(); cancelAnimationFrame(frame);
       window.removeEventListener('resize', fit);
-      root.style.removeProperty('--tour-reserved');
     };
   }, [flow, visible]);
 
@@ -430,6 +441,26 @@ export function ArchitectureTab({ visible, modelKey, loading, flow, promptIndex,
     navigateTutorial(0);
   }, [handleTokenChange, navigateTutorial]);
 
+  const resumeTutorial = useCallback(() => {
+    session.current.active = true;
+    setTourOpen(true);
+    archApiRef.current?.setTutorialActive(true);
+    navigateTutorial(session.current.step);
+  }, [navigateTutorial]);
+
+  const exitTutorial = useCallback(() => {
+    session.current.active = false;
+    setTourOpen(false);
+    archApiRef.current?.setTutorialActive(false);
+    archApiRef.current?.highlightTourBlock(null);
+  }, []);
+
+  useEffect(() => {
+    if (!visible) return;
+    resetTourPosition();
+    resumeTutorial();
+  }, [visible, resetTourPosition, resumeTutorial]);
+
   useEffect(() => {
     if (!flow) return;
     const previous = session.current;
@@ -451,8 +482,9 @@ export function ArchitectureTab({ visible, modelKey, loading, flow, promptIndex,
       onTokenChange: handleTokenChange,
     });
     archApiRef.current = api;
+    const active = previous.flow ? previous.active : true;
     session.current = {
-      active: true, navigating: true, step: resume, layer: 0, token,
+      active, navigating: true, step: resume, layer: 0, token,
       routerOpen: false, routerTab: 'per-token', mathOpen: false, view: null,
       flow, steps, modelKey,
       phaseLayers: sameModel ? previous.phaseLayers : {
@@ -464,7 +496,8 @@ export function ArchitectureTab({ visible, modelKey, loading, flow, promptIndex,
     setRouterSubTab('per-token');
     setGuideProse({ __html: '' });
     setMathStage(null);
-    api.setTutorialActive(true);
+    api.setTutorialActive(active);
+    setTourStep(resume);
     api.setLayer(layer);
     api.setToken(token);
     session.current.navigating = false;
@@ -577,17 +610,13 @@ export function ArchitectureTab({ visible, modelKey, loading, flow, promptIndex,
     const onKeyDown = (ev: KeyboardEvent) => {
       if (ev.key === 'Escape') {
         if (!visible) return;
-        if (tourExpanded) {
-          setTourExpanded(false);
-          return;
-        }
         if (session.current.mathOpen) closeMathModal();
         else archApiRef.current?.closeRouterModal();
       }
     };
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
-  }, [closeMathModal, tourExpanded, visible]);
+  }, [closeMathModal, visible]);
 
   // Only block the whole panel on a true first-load (or a failure before anything ever loaded).
   // Once a prompt has loaded once, keep showing it — including while a same-model prompt switch
@@ -628,7 +657,7 @@ export function ArchitectureTab({ visible, modelKey, loading, flow, promptIndex,
       : `all ${flow.num_experts} experts at each of ${flow.num_layers} layers`;
 
   return (
-    <div ref={architectureRef} data-architecture className="architecture-tutorial" style={{ display: visible ? undefined : 'none' }}>
+    <div ref={architectureRef} data-architecture className={`architecture-tutorial${tourOpen ? ' tour-active' : ''}`} style={{ display: visible ? undefined : 'none' }}>
       <div>
         <p className="sub">
           {/* ⚠ STRAIGHT double quotes (U+0022), exactly as the imperative
@@ -642,6 +671,7 @@ export function ArchitectureTab({ visible, modelKey, loading, flow, promptIndex,
         <div className="panel">
           <div className="flow-header">
             <div id="flow-block-label" className="flow-block-label"></div>
+            <button className="play-btn" id="start-tour-btn" type="button" onClick={resumeTutorial}>▶ Guided tour</button>
           </div>
 
           {/* The flow row. React renders the three blocks that do NOT depend on the current layer
@@ -671,25 +701,17 @@ export function ArchitectureTab({ visible, modelKey, loading, flow, promptIndex,
           </div></div>
         </div>
 
-        <div className={`tour-overlay open${mathStage || routerVisible ? ' popup-focused' : ''}${tourExpanded ? ' tour-expanded' : ''}`} id="tour-overlay" ref={dockRef}>
-          <div className="panel" id="param-count-panel" inert={tourExpanded || !!mathStage || routerVisible} dangerouslySetInnerHTML={paramPanelHtml} />
-          <div className="tour-card" role="region" aria-label="Model Architecture tutorial" data-tour-step={tourCard.id}>
-            <div className="tour-toolbar">
+        <div className="panel" id="param-count-panel" ref={parameterRef} inert={!!mathStage || routerVisible} dangerouslySetInnerHTML={paramPanelHtml} />
+        <div className={`tour-overlay${tourOpen ? ' open' : ''}`} id="tour-overlay">
+          <div className="tour-card" role="region" aria-label="Model Architecture tutorial" data-tour-step={tourOpen ? tourCard.id : undefined}
+            style={{ transform: `translate(${tourDrag.offset.x}px, ${tourDrag.offset.y}px)` }}>
+            <div className="tour-toolbar tour-drag-handle" title="Drag to move guided tour"
+              onPointerDown={tourDrag.onPointerDown} onPointerMove={tourDrag.onPointerMove}
+              onPointerUp={tourDrag.onPointerUp} onPointerCancel={tourDrag.onPointerUp}>
             <div className="tour-step-label" id="tour-step-label">
               Step {tourCard.mainStep} of {mainStepCount}{tourCard.view.kind !== 'intro' && ` · Transformer Block ${currentLayer + 1}`}
             </div>
-              <button
-                className="tour-expand-btn"
-                type="button"
-                aria-label={tourExpanded ? 'Collapse guided tour' : 'Expand guided tour'}
-                title={tourExpanded ? 'Collapse guided tour (Esc)' : 'Expand guided tour'}
-                aria-expanded={tourExpanded}
-                onClick={() => setTourExpanded(expanded => !expanded)}
-              >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d={tourExpanded ? 'M4 9h5V4M9 9 3 3M20 15h-5v5M15 15l6 6' : 'M9 3H3v6M3 3l7 7M15 21h6v-6M21 21l-7-7'} />
-                </svg>
-              </button>
+              <span aria-hidden="true">⠿</span>
             </div>
             <div className="tour-heading">
               <h3 id="tour-title">{tourNumber} {tourCard.title}</h3>
@@ -705,6 +727,7 @@ export function ArchitectureTab({ visible, modelKey, loading, flow, promptIndex,
               <div dangerouslySetInnerHTML={guideProse} />
             </div>
             <div className="tour-controls">
+              <button className="play-btn" id="tour-exit-btn" type="button" onClick={exitTutorial}>Exit tour</button>
               <div style={{ flex: '1 1 auto' }}></div>
               <button
                 className="play-btn"
@@ -749,8 +772,10 @@ export function ArchitectureTab({ visible, modelKey, loading, flow, promptIndex,
             screen and hand the scroll to the backdrop. Content is also sized to fit (adaptive
             cellPx via fitCellPx), so the body scrollbar is the short-window fallback, not the
             normal reading. */}
-        <div className="math-modal" style={{ maxHeight: '92vh', display: 'flex', flexDirection: 'column' }}>
-          <div className="math-modal-header" style={{ flex: '0 0 auto' }}>
+        <div className="math-modal" style={{ maxHeight: '92vh', display: 'flex', flexDirection: 'column', translate: `${mathDrag.offset.x}px ${mathDrag.offset.y}px` }}>
+          <div className="math-modal-header popup-drag-handle" style={{ flex: '0 0 auto' }}
+            onPointerDown={mathDrag.onPointerDown} onPointerMove={mathDrag.onPointerMove}
+            onPointerUp={mathDrag.onPointerUp} onPointerCancel={mathDrag.onPointerUp}>
             <h3 id="math-modal-title">{mathStage ? mathStage.payload.title : 'Matrix arithmetic'}</h3>
             {/* Header slot: where a stage is NAMED, level with ✕, exactly like the Router modal's
                 header — the Attention modal's "Attention" label + its step pills (attnSubTabBar),
@@ -794,13 +819,16 @@ export function ArchitectureTab({ visible, modelKey, loading, flow, promptIndex,
             maxHeight: routerSubTab === 'per-token' ? '92vh' : undefined,
             display: 'flex',
             flexDirection: 'column',
+            translate: `${routerDrag.offset.x}px ${routerDrag.offset.y}px`,
           }}
         >
           {/* Sub-tabs live IN the header, right of the title — they switch what the whole modal
               shows, so they belong to its chrome, not to the body's controls. `marginRight:auto`
               (not the header's default space-between) keeps them tucked against "Router" while the
               close button stays pinned right. */}
-          <div className="math-modal-header" style={{ flex: '0 0 auto', gap: 14 }}>
+          <div className="math-modal-header popup-drag-handle" style={{ flex: '0 0 auto', gap: 14 }}
+            onPointerDown={routerDrag.onPointerDown} onPointerMove={routerDrag.onPointerMove}
+            onPointerUp={routerDrag.onPointerUp} onPointerCancel={routerDrag.onPointerUp}>
             <h3 style={{ whiteSpace: 'nowrap' }}>Router</h3>
             <div className="sub-tabs" role="tablist" style={{ margin: 0, marginRight: 'auto' }}>
               <button

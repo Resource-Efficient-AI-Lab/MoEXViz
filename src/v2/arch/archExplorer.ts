@@ -166,9 +166,7 @@ export function bootArchExplorer(
   const numExperts = DATA.num_experts;
   let tutorialActive = false;
   function availableModalHeight() {
-    const tutorial = document.querySelector<HTMLElement>('[data-architecture]');
-    const reserved = tutorialActive && tutorial ? parseFloat(getComputedStyle(tutorial).getPropertyValue('--tour-reserved')) || 260 : 0;
-    return Math.max(120, Math.min(window.innerHeight * 0.92, window.innerHeight - reserved - 24));
+    return Math.max(120, Math.min(window.innerHeight * 0.92, window.innerHeight - 24));
   }
 
   // ---- layout: one row per token, 64 cells across ----
@@ -652,7 +650,7 @@ export function bootArchExplorer(
           opSpan('·', true),
           matBlock('W_down', wDims(H, I), gridHTML(gw.down, 10), true),
           opSpan('=', true),
-          resultBlock('expert output', '(1, ' + H + ')', stripHTML(outVec, 7), true),
+          resultBlock('expert output', '(1, ' + H + ')', stripHTML(outVec, 7), true, true),
         ],
       ], 5, { big: true });
       html += '<div class="math-eq wrap" style="font-size:11.5px;">contribution = <span class="val">' + ((weight as number) * 100).toFixed(2) +
@@ -2026,6 +2024,7 @@ export function bootArchExplorer(
       const cols = +((container as HTMLElement).dataset.cols || 0);
       const beats: HTMLElement[][] = [];
       kids.forEach((k, i) => {
+        if (k.hasAttribute('data-reveal-last')) return;
         const b = cols > 0 ? i % cols : i;
         (beats[b] || (beats[b] = [])).push(k);
       });
@@ -2044,6 +2043,19 @@ export function bootArchExplorer(
         // of a grid still fading in.
         t += cells.length ? STAGE_ADVANCE_CELLS : STAGE_ADVANCE_OPS;
       });
+      // The expert output depends on the gate/up results. Reveal its whole card only
+      // after those beats finish, including its title, border and dimensions.
+      const finalResults = kids.filter(k => k.hasAttribute('data-reveal-last'));
+      if (finalResults.length) {
+        t = Math.max(t, tl.duration()) + 0.15;
+        tl.fromTo(finalResults, { opacity: 0 }, { opacity: 1, duration: 0.3, ease: 'power2.out' }, t);
+        const cells = finalResults.flatMap(k => [...k.querySelectorAll('.mm-cell')]);
+        if (cells.length) {
+          tl.fromTo(cells, BEAT_CELL_FROM,
+            { opacity: 1, scale: 1, duration: 0.26, ease: 'power2.out', force3D: false, stagger: { amount: STAGE_BEAT_CELLS } }, t);
+        }
+        t = tl.duration();
+      }
     });
     const d = tl.duration();
     if (d > 0) tl.timeScale(d / (d + ATTN_STEP_EXTRA));
@@ -2322,14 +2334,8 @@ export function bootArchExplorer(
         // Beat tags: the two lanes carry the SAME keys, so each beat tweens both at one timeline
         // position and the experts run in parallel (2026-08-01, by request) — while `cheads` is one
         // tagged block per lane holding 16 head grids, so inside a lane the heads land left to right.
-        // NOT `diagramRow` (2026-08-03, by request): its `flex-wrap: wrap` let the `× weight` tail
-        // drop onto its own centred line whenever the lane outgrew the stack — which it always did
-        // at the 1240px modal cap once `→ combine →` + the output claimed their ~365px. This div is
-        // the same row with `flex-wrap: nowrap` and NO overflow-x, so what gives on a narrow modal
-        // is the head strip (headStripHTML wraps internally; a flex item's auto minimum is its
-        // min-content, one head), while `· W_o × weight` stays welded to the strip's right — the
-        // reading is `concat · W_o × weight`, and the weight must sit beside what it scales.
-        const laneRow = (l: any) => '<div data-diagram style="display:flex;align-items:center;gap:8px;flex-wrap:nowrap;justify-content:center;margin:8px 0 12px;">' + [
+        // The shared row keeps the weight beside its projection and centers the actual graphics.
+        const laneRow = (l: any) => diagramRow([
           // No "· steps 1 & 3" marker on the followed expert's lane (removed by request the same day
           // it was added): the two lanes are the same reading, and singling one out re-introduced the
           // "one of these is the real one" hierarchy the second lane exists to dissolve. The header
@@ -2345,20 +2351,15 @@ export function bootArchExplorer(
           beat('cdot', opSpan('·')),
           beat('cwo', matBlock('W_o (expert ' + (l.o.e + 1) + ')', '(' + H + ',' + H + ')', gridHTML(l.aew.o, 5))),
           beat('cweight', opSpan('× ' + (l.o.w * 100).toFixed(1) + '%')),
-        ].join('') + '</div>';
+        ]);
         const concatDiagram = allLanes
-          // `nowrap` on the wrapper, `min-width:0` on the lane stack: the combine and the output must
-          // stay to the RIGHT of the stack at every width — that is the whole point of the layout —
-          // so what gives on a narrow viewport is the head strip, which wraps onto a second line
-          // inside its own lane (headStripHTML already wraps; min-width:0 is what lets the flex item
-          // shrink to it). Letting the wrapper wrap instead drops the output onto its own line below.
-          ? '<div style="display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:nowrap;margin:8px 0 12px;">' +
-              '<div style="display:flex;flex-direction:column;gap:2px;min-width:0;">' + combineLanes.map(laneRow).join('') + '</div>' +
+          ? diagramRow([
+              '<div class="mm-lane-stack" style="display:flex;flex-direction:column;gap:2px;">' + combineLanes.map(laneRow).join('') + '</div>',
               // nbsp: this is the one operator whose neighbours can shrink, so a narrow viewport
               // would otherwise break "→ combine →" across three lines.
-              beat('ccomb', opSpan('→&nbsp;combine&nbsp;→', false, true)) +
-              beat('cout', matBlock('attention output (both experts)', '(' + numTokens + ',' + H + ')', gridHTML(lf.attn_output, 4))) +
-            '</div>'
+              beat('ccomb', opSpan('→&nbsp;combine&nbsp;→', false, true)),
+              beat('cout', matBlock('attention output (both experts)', '(' + numTokens + ',' + H + ')', gridHTML(lf.attn_output, 4))),
+            ])
           // Single-lane fallback: no per-lane `× weight` operator, so that beat is simply absent and
           // `playAttnStep` gates its cursor on it.
           : diagramRow([beat('cheads', matBlock('expert ' + (E + 1) + '’s ' + nh + ' query heads × (' + numTokens + ',' + hd + ') concatenated', '(' + numTokens + ',' + H + ')', headStripHTML(aef.head_output_by_head, 7))), beat('cdot', opSpan('·')), beat('cwo', matBlock('W_o (expert ' + (E + 1) + ')', '(' + H + ',' + H + ')', gridHTML(aew.o, 5))), beat('ccomb', opSpan('→ combine →')), beat('cout', matBlock('attention output (both experts)', '(' + numTokens + ',' + H + ')', gridHTML(lf.attn_output, 4)))]);
@@ -2566,7 +2567,7 @@ export function bootArchExplorer(
         const ttAll = DATA.layers[li].tokens[tIdx];
         const orderedAll = ttAll.top_experts.map((e: number, k: number) => ({ e, w: ttAll.top_weights[k] })).sort((a: any, b: any) => b.w - a.w);
         const eqText = orderedAll.map((o: any) => 'e' + (o.e + 1) + '×' + (o.w * 100).toFixed(1) + '%').join(' + ') + (DATA.shared_experts ? ' + shared' : '');
-        html += '<div style="display:flex;align-items:center;gap:10px;flex-wrap:nowrap;margin:8px 0;padding:9px 12px;' +
+        html += '<div class="mm-combined-row" style="display:flex;align-items:center;justify-content:safe center;gap:10px;flex-wrap:nowrap;margin:8px 0;padding:9px 12px;' +
           'background:var(--page);border:1px solid var(--border);border-radius:8px;overflow-x:auto;">' +
           '<div style="font-weight:700;font-size:12.5px;flex:0 0 auto;min-width:56px;">"' + escapeHtml(t.text.trim() || '·') + '"</div>' +
           '<div style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;color:var(--text-secondary);flex:0 0 auto;white-space:nowrap;">' + eqText + '</div>' +
