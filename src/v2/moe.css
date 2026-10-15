@@ -404,6 +404,19 @@ svg.moe-svg { width: 100%; height: auto; display: block; }
 footer.note { font-size: 11.5px; color: var(--text-muted); margin-top: 6px; line-height: 1.5; }
 
 .math-hint { font-size: 12.5px; color: var(--text-secondary); }
+/* Three shared tracks keep the graphics centered independently of title/dimension lengths.
+   Subgrids retain the existing direct-child structure used by the reveal timelines. */
+.mm-diagram-scroll { max-width: 100%; overflow-x: auto; display: flex; justify-content: safe center; margin: 8px 0 12px; padding: 6px 0 10px; }
+.mm-equation { display: grid; flex: 0 0 auto; width: max-content; row-gap: 0; }
+.mm-equation-row, .mm-equation-group { grid-auto-flow: column; grid-auto-columns: max-content; column-gap: 8px; }
+.mm-equation-row { grid-template-rows: auto auto auto; }
+.mm-equation-group, .mm-operand, .mm-operator { display: grid; grid-template-rows: subgrid; grid-row: span 3; row-gap: 0; align-items: center; justify-items: center; }
+.mm-equation > :not(.mm-operand):not(.mm-operator):not(.mm-equation-group) { grid-row: 2; align-self: center; }
+.mm-label { grid-row: 1; align-self: end; }
+.mm-visual, .mm-symbol { grid-row: 2; display: flex; align-items: center; justify-content: center; }
+.mm-dim { grid-row: 3; align-self: start; }
+/* A two-lane input is tall: keep its combined output's labels close to the centered grid. */
+.mm-equation:has(> .mm-lane-stack) > .mm-operand { grid-template-rows: 1fr auto 1fr; }
 @keyframes mm-appear { from { opacity: 0; transform: scale(0.4); } to { opacity: 1; transform: scale(1); } }
 .mm-cell { animation: mm-appear 0.3s ease-out both; }
 .no-cell-anim .mm-cell { animation: none; }
@@ -419,6 +432,7 @@ footer.note { font-size: 11.5px; color: var(--text-muted); margin-top: 6px; line
    The second rule targets operators by the absence of grid cells; verified across all three models
    that every `[data-beat]` either holds `.mm-cell`s or is one of the operator keys. */
 .beat-armed .mm-cell { opacity: 0; transform: scale(0.4); }
+.mm-staged.beat-armed [data-reveal-last] { opacity: 0; }
 .beat-armed [data-beat]:not(:has(.mm-cell)) { opacity: 0; transform: scale(0.8); }
 /* The same arming, for every OTHER math modal (playStageReveal). Those stages carry no `data-beat`
    — their beats are the direct children of a `[data-diagram]` container, in DOM order — so the
@@ -492,12 +506,12 @@ footer.note { font-size: 11.5px; color: var(--text-muted); margin-top: 6px; line
 .tour-token-picker select { max-width: 150px; padding: 3px 5px; border: 1px solid var(--border); border-radius: 5px; color: var(--text-primary); background: var(--surface-1); font: inherit; }
 .tour-prose { overflow-y: auto; min-height: 0; overscroll-behavior: contain; }
 .tour-prose p + p, .tour-prose > div > p { margin-top: 7px; }
-.architecture-tutorial { --tour-reserved: 180px; --popup-scrim: rgba(11,11,11,0.42); }
-.architecture-tutorial .tour-card { width: min(840px, 100%); max-height: min(42dvh, 360px); display: flex; flex-direction: column; box-sizing: border-box; }
+.architecture-tutorial { --popup-scrim: rgba(11,11,11,0.42); }
+.architecture-tutorial .tour-card { width: min(560px, 100%); height: min(300px, 42dvh); display: flex; flex-direction: column; box-sizing: border-box; }
 .architecture-tutorial .tour-step-label, .architecture-tutorial .tour-heading, .architecture-tutorial .tour-controls { flex: 0 0 auto; }
-.architecture-tutorial .math-modal-backdrop { bottom: var(--tour-reserved); padding: 12px 16px; overflow: hidden; background: var(--popup-scrim); }
-.architecture-tutorial .math-modal { max-height: min(92dvh, calc(100dvh - var(--tour-reserved) - 24px)) !important; }
-.architecture-tutorial #math-content .math-hint, .architecture-tutorial .ptr-caption { display: none !important; }
+.architecture-tutorial .math-modal-backdrop { inset: 0; padding: 12px 16px; overflow: hidden; background: var(--popup-scrim); }
+.architecture-tutorial .math-modal { max-height: calc(100dvh - 24px) !important; }
+.architecture-tutorial.tour-active #math-content .math-hint, .architecture-tutorial.tour-active .ptr-caption { display: none !important; }
 .diagram-legend { color: var(--text-secondary); font-size: 12px; line-height: 1.5; }
 .conceptual-norm { display: flex; align-items: center; justify-content: center; gap: 12px; flex-wrap: wrap; padding: 20px 0; }
 .conceptual-step { display: flex; flex-direction: column; gap: 7px; padding: 18px 14px; border: 1.5px solid var(--series-3); border-radius: 10px; background: var(--surface-1); text-align: center; }
@@ -536,6 +550,8 @@ footer.note { font-size: 11.5px; color: var(--text-muted); margin-top: 6px; line
   padding: 16px 20px; border-bottom: 1px solid var(--border);
 }
 .math-modal-header h3 { font-size: 15px; font-weight: 700; margin: 0; }
+.popup-drag-handle { cursor: grab; touch-action: none; user-select: none; }
+.popup-drag-handle:active { cursor: grabbing; }
 #math-modal-title { display: none; }
 .math-modal-close {
   width: 28px; height: 28px; border-radius: 8px; border: 1px solid var(--border); background: transparent;
@@ -932,7 +948,7 @@ footer.note { font-size: 11.5px; color: var(--text-muted); margin-top: 6px; line
 .pdf-nt-row .bar-fill { height: 100%; background: var(--seq-500); border-radius: 3px; }
 .pdf-nt-row .pct { flex: 0 0 auto; text-align: right; font-variant-numeric: tabular-nums; color: var(--text-muted); }
 
-/* Persistent parameter count and tutorial dock. Its measured height reserves modal space. */
+/* Emphasize sample selection during the matching tutorial step. */
 .moe-root:has([data-tour-step="select-sample"]) .prompt-picker select {
   outline: 2px solid var(--series-1);
   outline-offset: 4px;
@@ -945,76 +961,26 @@ footer.note { font-size: 11.5px; color: var(--text-muted); margin-top: 6px; line
   .moe-root:has([data-tour-step="select-sample"]) .prompt-picker select { animation: none; }
 }
 .architecture-tutorial .tour-token-picker[hidden] { display: none; }
-.architecture-tutorial .tour-overlay {
-  left: 48px; right: 48px; max-width: 1920px; padding: 8px 0 12px;
-  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 16px; background: var(--page); align-items: stretch;
-}
-/* Continue the popup backdrop across the dock; only the guide rises above it. */
-.architecture-tutorial .tour-overlay.popup-focused::after {
-  content: ''; position: fixed; inset: auto 0 0; height: var(--tour-reserved);
-  background: var(--popup-scrim); pointer-events: auto;
-}
-.architecture-tutorial .tour-card { position: relative; z-index: 1; }
-.architecture-tutorial .tour-card,
-.architecture-tutorial #param-count-panel {
-  width: 100%; min-width: 0; height: min(168px, 24dvh); max-height: none;
-  margin: 0; box-sizing: border-box; pointer-events: auto;
-}
-.architecture-tutorial #param-count-panel { overflow-y: auto; padding: 8px 12px; overscroll-behavior: contain; }
-.architecture-tutorial #param-count-panel .math-eq { white-space: pre-wrap; overflow-wrap: anywhere; overflow-x: visible; }
+/* The guide floats above full-viewport modals; parameter count remains in document flow. */
+.architecture-tutorial .tour-overlay { background: transparent; }
+.architecture-tutorial .tour-card { padding: 16px 20px; }
 .architecture-tutorial .tour-controls { margin-top: auto; padding-top: 12px; }
 .architecture-tutorial .tour-prose { flex: 1 1 auto; }
-@media (min-width: 761px) {
-  .architecture-tutorial:has(.tour-token-picker[hidden]) .tour-card,
-  .architecture-tutorial:has(.tour-token-picker[hidden]) #param-count-panel {
-    height: min(200px, 28dvh);
-  }
-}
 .architecture-tutorial .tour-heading { flex-wrap: wrap; gap: 6px 12px; }
-@media (max-width: 760px) {
-  .architecture-tutorial .tour-overlay {
-    left: 12px; right: 12px; padding: 8px 0 12px; gap: 8px;
-    height: min(300px, 44dvh); grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: minmax(0, 0.8fr) minmax(0, 1.2fr);
-  }
-  .architecture-tutorial .tour-card,
-  .architecture-tutorial #param-count-panel { height: 100%; min-height: 0; padding: 10px 12px; }
-  .architecture-tutorial .tour-card h3 { font-size: 13px; margin-bottom: 3px; }
-  .architecture-tutorial .tour-heading { flex-direction: row; }
-  .architecture-tutorial .tour-controls { padding-top: 6px; }
-}
-
-/* Scale only the flow, never the guide or parameter text. */
+.architecture-tutorial #param-count-panel { width: 100%; box-sizing: border-box; margin-top: 8px; }
+.architecture-tutorial #param-count-panel .math-eq { white-space: pre-wrap; overflow-wrap: anywhere; overflow-x: visible; }
 .architecture-tutorial .flow-viewport { position: relative; min-width: 0; }
 .architecture-tutorial .flow-viewport .pdf-scroll { position: absolute; top: 0; left: 0; transform-origin: top left; margin: 0; }
-.architecture-tutorial .tour-card { padding: 8px 12px; }
-.architecture-tutorial .tour-controls { padding-top: 6px; }
-.architecture-tutorial .tour-card p { line-height: 1.4; }
-.architecture-tutorial .tour-prose p + p, .architecture-tutorial .tour-prose > div > p { margin-top: 4px; }
-.architecture-tutorial #param-count-panel h2 { margin-bottom: 5px !important; }
-.architecture-tutorial #param-count-panel .math-eq { padding: 4px 8px; line-height: 1.4; margin: 0; }
-.architecture-tutorial #param-count-panel footer.note { margin-top: 4px; line-height: 1.35; }
-
-.architecture-tutorial #param-count-panel { grid-column: 1; grid-row: 1; }
-.architecture-tutorial .tour-card {
-  grid-column: 1 / -1; grid-row: 1; justify-self: end;
-  width: calc((100% - 16px) / 2); transition: width 180ms ease;
-}
-.architecture-tutorial .tour-expanded .tour-card { width: 100%; }
-.tour-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex: 0 0 auto; }
+.tour-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex: 0 0 auto; margin-bottom: 6px; }
 .tour-toolbar .tour-step-label { margin-bottom: 0; }
-.tour-expand-btn {
-  display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto;
-  width: 24px; height: 24px; padding: 3px; border: 0; border-radius: 4px;
-  color: var(--text-secondary); background: transparent; cursor: pointer;
-}
-.tour-expand-btn:hover { color: var(--seq-500); background: var(--surface-2); }
-.tour-expand-btn:focus-visible { outline: 2px solid var(--seq-500); outline-offset: 2px; }
+.architecture-tutorial .tour-drag-handle { cursor: grab; user-select: none; touch-action: none; }
+.architecture-tutorial .tour-drag-handle:active { cursor: grabbing; }
 @media (max-width: 760px) {
-  .architecture-tutorial .tour-card { grid-row: 2; width: 100%; }
-  .architecture-tutorial .tour-expanded .tour-card { grid-row: 1 / -1; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .architecture-tutorial .tour-card { transition: none; }
+  .architecture-tutorial .tour-overlay { padding: 0 12px 12px; }
+  .architecture-tutorial .tour-card { padding: 12px; height: min(300px, 48dvh); }
+  .architecture-tutorial .tour-heading { flex-direction: row; }
+  .architecture-tutorial .flow-header { grid-template-columns: minmax(0, 1fr) auto; }
+  .architecture-tutorial .flow-block-label { grid-column: 1; gap: 4px; }
+  .architecture-tutorial .flow-block-label .title { font-size: 11px; white-space: normal; text-align: center; }
+  .architecture-tutorial .flow-header > .play-btn { grid-column: 2; font-size: 11px; }
 }

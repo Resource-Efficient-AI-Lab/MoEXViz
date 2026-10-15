@@ -1,7 +1,71 @@
 import { test, expect, type Page } from '@playwright/test';
 import { expectedStepNumbers, expectedStops, traceFor, type Model } from '../traceFixtures';
 
-const guide = (page: Page) => page.locator('.tour-card');
+const guide = (page: Page) => page.locator('#tour-overlay .tour-card');
+
+test('expert output card stays hidden until the gate and up results finish', async ({ page }) => {
+  await load(page, 'olmoe');
+  await advanceTo(page, 'expert-router');
+  const reveal = await page.evaluate(async () => {
+    document.querySelector<HTMLButtonElement>('#tour-next-btn')!.click();
+    let initialOpacity: number | undefined;
+    let prerequisitesAtReveal: number[] = [];
+    const start = performance.now();
+    while (performance.now() - start < 6000) {
+      await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+      const grid = document.querySelector('#math-subtab-expert [data-diagram]');
+      if (!grid) continue;
+      const blocks = [...grid.children];
+      const opacity = Number(getComputedStyle(blocks[14]).opacity);
+      initialOpacity ??= opacity;
+      if (opacity > 0.01 && !prerequisitesAtReveal.length) {
+        prerequisitesAtReveal = [blocks[4], blocks[9]].map(el => Number(getComputedStyle(el).opacity));
+      }
+      if (opacity >= 0.999 && prerequisitesAtReveal.length) {
+        return { initialOpacity, prerequisitesAtReveal, complete: true, reduced: matchMedia('(prefers-reduced-motion: reduce)').matches };
+      }
+    }
+    return { initialOpacity, prerequisitesAtReveal, complete: false, reduced: false };
+  });
+  if (!reveal.reduced) expect(reveal.initialOpacity).toBe(0);
+  expect(reveal.prerequisitesAtReveal).toEqual([1, 1]);
+  expect(reveal.complete).toBe(true);
+});
+
+test('architecture computation and router popups drag by their headers', async ({ page }) => {
+  await load(page, 'olmoe');
+  for (const [step, backdrop, close] of [
+    ['embedding-detail', '#math-backdrop', '#math-modal-close'],
+    ['router-single', '#moe-grid-backdrop', '#moe-grid-close'],
+  ]) {
+    await advanceTo(page, step);
+    const modal = page.locator(`${backdrop} .math-modal`);
+    const header = page.locator(`${backdrop} .math-modal-header`);
+    await expect(modal).toBeVisible();
+    // Wait out the popup's entrance animation before measuring its position.
+    await modal.evaluate(el => Promise.all(el.getAnimations().map(animation => animation.finished)));
+    const before = (await modal.boundingBox())!;
+    const handle = (await header.boundingBox())!;
+    await page.mouse.move(handle.x + 8, handle.y + 8);
+    await page.mouse.down();
+    await page.mouse.move(handle.x + 38, handle.y + 33, { steps: 8 });
+    await page.mouse.up();
+    const after = (await modal.boundingBox())!;
+    expect(after.x - before.x).toBeCloseTo(30, 0);
+    expect(after.y - before.y).toBeCloseTo(25, 0);
+    if (step === 'router-single') {
+      await modal.getByRole('tab', { name: 'All tokens routing', exact: true }).click();
+      await expect(modal.getByRole('tab', { name: 'All tokens routing', exact: true })).toHaveAttribute('aria-selected', 'true');
+      expect((await modal.boundingBox())!.x).toBeCloseTo(after.x, 0);
+    }
+    await page.locator(close).click();
+    await expect(modal).toBeHidden();
+    await advanceTo(page, step);
+    await expect(modal).toBeVisible();
+    await expect(modal).toHaveCSS('translate', '0px');
+    await page.locator(close).click();
+  }
+});
 
 test('introductions keep the architecture visible and selection changes preserve the agreed position', async ({ page }, testInfo) => {
   await page.goto('');
@@ -50,49 +114,36 @@ test('introductions keep the architecture visible and selection changes preserve
   await expect(page.locator('#attn-subtab-map')).toBeVisible();
 });
 
-test('popup dims and blocks the parameter panel while the guide stays usable', async ({ page }, testInfo) => {
+test('full-viewport popup dims parameters and leaves the floating guide interactive', async ({ page }) => {
   await load(page, 'olmoe');
-  const dock = page.locator('.tour-overlay'), parameter = page.locator('#param-count-panel');
+  const parameter = page.locator('#param-count-panel');
   await expect(parameter).not.toHaveAttribute('inert');
   await next(page, 'embedding-detail');
-  await expect(dock).toHaveClass(/popup-focused/);
   await expect(parameter).toHaveAttribute('inert');
-  const layering = await page.evaluate(() => {
-    const dock = document.querySelector('.tour-overlay')!;
-    const parameter = document.querySelector('#param-count-panel')!.getBoundingClientRect();
-    const guide = document.querySelector('.tour-card')!.getBoundingClientRect();
-    return {
-      sameShade: getComputedStyle(dock, '::after').backgroundColor === getComputedStyle(document.querySelector('#math-backdrop')!).backgroundColor,
-      parameterBlocked: document.elementFromPoint(parameter.x + 20, parameter.y + 20) === dock,
-      guideAccessible: !!document.elementFromPoint(guide.x + 20, guide.y + 20)?.closest('.tour-card'),
-    };
-  });
-  expect(layering).toEqual({ sameShade: true, parameterBlocked: true, guideAccessible: true });
-  await page.screenshot({ path: testInfo.outputPath('consistent-dim.png') });
+  expect(await page.evaluate(() => {
+    const guide = document.querySelector('#tour-overlay .tour-card')!.getBoundingClientRect();
+    const backdrop = document.querySelector('#math-backdrop')!.getBoundingClientRect();
+    return backdrop.bottom === innerHeight && !!document.elementFromPoint(guide.x + 20, guide.y + 20)?.closest('.tour-card');
+  })).toBe(true);
   await page.locator('#math-modal-close').click();
   await expect(parameter).not.toHaveAttribute('inert');
-  await expect(dock).not.toHaveClass(/popup-focused/);
   await advanceTo(page, 'router-single');
-  await expect(parameter).toHaveAttribute('inert');
-  await expect(dock).toHaveClass(/popup-focused/);
-  await next(page, 'router-all');
   await expect(parameter).toHaveAttribute('inert');
   await page.locator('#moe-grid-close').click();
   await expect(parameter).not.toHaveAttribute('inert');
-  await expect(dock).not.toHaveClass(/popup-focused/);
 });
 
-test('entire architecture flow fits above the pinned cards without page scrolling', async ({ page }, testInfo) => {
+test('entire architecture flow fits above the full-width parameter panel', async ({ page }, testInfo) => {
   for (const viewport of [{ width: 1440, height: 900 }, { width: 1366, height: 768 }, { width: 1024, height: 768 }, { width: 1440, height: 640 }]) {
     await page.setViewportSize(viewport);
     for (const model of ['olmoe', 'jetmoe', 'deepseek'] as Model[]) {
       await load(page, model);
       await expect.poll(() => page.evaluate(() => {
-        const dock = document.querySelector('.tour-overlay')!.getBoundingClientRect();
+        const dock = document.querySelector('#param-count-panel')!.getBoundingClientRect();
         const flow = document.querySelector('.pdf-scroll')!.getBoundingClientRect();
         const arrows = [...document.querySelectorAll('.skip-overlay, .loop-overlay')].map(el => el.getBoundingClientRect());
         return {
-          fits: [flow, ...arrows].every(rect => rect.top >= 0 && rect.bottom <= dock.top - 8 && rect.left >= 0 && rect.right <= innerWidth),
+          fits: [flow, ...arrows].every(rect => rect.top >= 0 && rect.bottom <= dock.top && rect.left >= 0 && rect.right <= innerWidth),
           noPageScroll: document.documentElement.scrollHeight <= innerHeight + 1,
           atTop: window.scrollY === 0,
         };
@@ -105,7 +156,7 @@ test('entire architecture flow fits above the pinned cards without page scrollin
 });
 async function at(page: Page, id: string) {
   await expect(guide(page)).toHaveAttribute('data-tour-step', id);
-  await expect(page.locator('.tour-overlay')).toBeVisible();
+  await expect(page.locator('#tour-overlay')).toBeVisible();
 }
 async function checkNumbering(page: Page, number: string) {
   await expect(page.locator('.tour-step-label')).toContainText(`Step ${number.split('.')[0]} of 11`);
@@ -138,19 +189,14 @@ async function load(page: Page, model: Model) {
   return flow;
 }
 async function checkLayout(page: Page) {
-  const bounds = await page.evaluate(() => {
-    const card = document.querySelector('.tour-overlay')!.getBoundingClientRect();
-    const modals = [...document.querySelectorAll<HTMLElement>('.math-modal-backdrop.open .math-modal')].map((modal) => {
-      const rect = modal.getBoundingClientRect();
-      return { top: rect.top, bottom: rect.bottom };
-    });
-    return { guideTop: card.top, guideBottom: card.bottom, height: innerHeight, modals };
-  });
-  expect(bounds.guideBottom).toBeLessThanOrEqual(bounds.height);
-  for (const modal of bounds.modals) {
-    expect(modal.top).toBeGreaterThanOrEqual(0);
-    expect(modal.bottom).toBeLessThanOrEqual(bounds.guideTop - 7);
-  }
+  await expect(page.locator('#tour-next-btn')).toBeInViewport();
+  await expect(page.locator('#tour-back-btn')).toBeInViewport();
+  const bounds = await guide(page).boundingBox();
+  const viewport = page.viewportSize()!;
+  expect(bounds!.x).toBeGreaterThanOrEqual(0);
+  expect(bounds!.y).toBeGreaterThanOrEqual(0);
+  expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(viewport.width);
+  expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(viewport.height);
 }
 async function checkView(page: Page, id: string) {
   const overview = ['what-is-moe', 'select-sample', 'embedding', 'norm-attention', 'attention', 'residual-attention', 'norm-ffn', 'dense', 'moe', 'residual-ffn', 'repeat', 'final-norm', 'final-output'].includes(id);
@@ -173,6 +219,64 @@ async function checkView(page: Page, id: string) {
 }
 
 for (const model of ['olmoe', 'jetmoe', 'deepseek'] as Model[]) {
+  test(`${model}: architecture equations center graphics and complete rows`, async ({ page }, testInfo) => {
+    const errors: string[] = [];
+    page.on('pageerror', error => errors.push(error.message));
+    await load(page, model);
+    const stops = expectedStops(model);
+    let checked = 0;
+    for (const id of stops.slice(stops.indexOf('embedding') + 1)) {
+      await next(page, id);
+      // Finish the current reveal before measuring layout; the separate output-reveal test
+      // exercises its actual timing, rather than confusing tween scale with alignment.
+      const geometry = await page.evaluate(() => {
+        const visible = (el: Element) => (el as HTMLElement).offsetWidth > 0 && (el as HTMLElement).offsetHeight > 0;
+        document.querySelectorAll<HTMLElement>('#math-content .mm-staged, #math-content .math-subtab-panel').forEach(el => {
+          if (visible(el)) el.click();
+        });
+        return [...document.querySelectorAll<HTMLElement>('#math-content .mm-equation')].filter(visible).map(eq => {
+          const rows = new Map<string, number[]>();
+          [...eq.children].forEach(block => {
+            const key = getComputedStyle(block).gridRowStart;
+            const visuals = block.matches('.mm-operand, .mm-operator')
+              ? [block.querySelector('.mm-visual, .mm-symbol')!]
+              : block.matches('.mm-equation-group') ? [...block.querySelectorAll('.mm-visual, .mm-symbol')] : [];
+            for (const visual of visuals) {
+              const rect = visual.getBoundingClientRect();
+              const centers = rows.get(key) || [];
+              centers.push(rect.y + rect.height / 2);
+              rows.set(key, centers);
+            }
+          });
+          const scroller = eq.parentElement!;
+          const rect = eq.getBoundingClientRect(), scroll = scroller.getBoundingClientRect();
+          const previousScroll = scroller.scrollLeft;
+          scroller.scrollLeft = 0;
+          const start = eq.getBoundingClientRect();
+          scroller.scrollLeft = scroller.scrollWidth;
+          const end = eq.getBoundingClientRect();
+          scroller.scrollLeft = previousScroll;
+          return {
+            rowSpreads: [...rows.values()].map(values => Math.max(...values) - Math.min(...values)),
+            centerError: rect.width <= scroll.width ? Math.abs(rect.x + rect.width / 2 - scroll.x - scroll.width / 2) : 0,
+            overflowReachable: rect.width <= scroll.width || (start.left >= scroll.left - 1 && end.right <= scroll.right + 1),
+          };
+        });
+      });
+      for (const equation of geometry) {
+        checked++;
+        for (const spread of equation.rowSpreads) expect(spread, `${model} ${id}: graphic centerlines`).toBeLessThanOrEqual(1);
+        expect(equation.centerError, `${model} ${id}: horizontal center`).toBeLessThanOrEqual(1);
+        expect(equation.overflowReachable, `${model} ${id}: scroll reach`).toBe(true);
+      }
+      if (['norm-attention-detail', 'expert-ffn', 'attention-map', 'attention-concat'].includes(id)) {
+        await page.screenshot({ path: testInfo.outputPath(`${id}.png`), style: '#tour-overlay { visibility: hidden; }' });
+      }
+    }
+    expect(checked).toBeGreaterThanOrEqual(10);
+    expect(errors).toEqual([]);
+  });
+
   test(`${model}: complete tutorial forwards and backwards`, async ({ page }, testInfo) => {
     const errors: string[] = [];
     page.on('pageerror', (error) => errors.push(error.message));
@@ -219,7 +323,7 @@ for (const model of ['olmoe', 'jetmoe', 'deepseek'] as Model[]) {
       await checkLayout(page);
     }
     await expect(page.locator('#flow-block-label .title')).toHaveText(`Transformer Block 1 of ${flow.num_layers}`);
-    await page.locator('.pdf-block.final-output').click();
+    await page.locator('.out-narrow').click();
     await at(page, 'final-output-detail');
     await page.locator('#tour-next-btn').click();
     await at(page, 'what-is-moe');
@@ -281,7 +385,7 @@ for (const model of ['olmoe', 'jetmoe', 'deepseek'] as Model[]) {
       await at(page, 'moe');
     }
     await page.getByRole('button', { name: 'Domain Specialization Analysis', exact: true }).click();
-    await expect(page.locator('.tour-overlay')).toBeHidden();
+    await expect(page.locator('#tour-overlay')).toBeHidden();
     await page.getByRole('button', { name: 'Model Architecture', exact: true }).click();
     await at(page, 'moe');
     await advanceTo(page, 'final-output-detail');
@@ -329,19 +433,39 @@ test('manual operation detours, inactive experts and model reset', async ({ page
   await expect(page.locator('#flow-block-label .title')).toHaveText('Transformer Block 1 of 24');
 });
 
-test('persistent dock splits evenly and stacks in narrow windows', async ({ page }) => {
+test('full-width parameters and floating tour drag, resume, visit reset and phone controls', async ({ page }, testInfo) => {
   await load(page, 'olmoe');
-  await expect(page.locator('#start-tour-btn, #tour-exit-btn')).toHaveCount(0);
   const parameter = page.locator('#param-count-panel');
-  await expect(parameter).toBeVisible();
-  const left = (await parameter.boundingBox())!, right = (await guide(page).boundingBox())!;
-  expect(Math.abs(left.width - right.width)).toBeLessThan(2);
-  expect(right.x).toBeGreaterThan(left.x + left.width);
+  const diagram = page.locator('.flow-viewport');
+  const left = (await parameter.boundingBox())!, flow = (await diagram.boundingBox())!;
+  expect(left.width).toBeGreaterThan(flow.width);
+  expect(left.y).toBeGreaterThanOrEqual(flow.y + flow.height);
+  await expect(page.getByLabel('Expand guided tour')).toHaveCount(0);
+  const before = (await guide(page).boundingBox())!;
+  const handle = (await page.locator('.tour-drag-handle').boundingBox())!;
+  await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(handle.x + handle.width / 2 + 70, handle.y + handle.height / 2 - 80, { steps: 8 });
+  await page.mouse.up();
+  const moved = (await guide(page).boundingBox())!;
+  expect(moved.x - before.x).toBeCloseTo(70, 0);
+  expect(moved.y - before.y).toBeCloseTo(-80, 0);
+  await next(page, 'embedding-detail');
+  expect((await guide(page).boundingBox())!.x).toBeCloseTo(moved.x, 0);
+  await page.locator('#tour-exit-btn').click();
+  await expect(page.locator('#tour-overlay')).toBeHidden();
+  await expect(page.locator('#math-content .math-hint').first()).toBeVisible();
+  await page.locator('#math-modal-close').click();
+  await page.locator('#start-tour-btn').click();
+  await at(page, 'embedding-detail');
+  expect((await guide(page).boundingBox())!.x).toBeCloseTo(moved.x, 0);
+  await page.locator('#math-modal-close').click();
+  await page.getByRole('button', { name: 'Domain Specialization Analysis', exact: true }).click();
+  await page.getByRole('button', { name: 'Model Architecture', exact: true }).click();
+  expect((await guide(page).boundingBox())!.x).toBeCloseTo(before.x, 0);
+  await page.screenshot({ path: testInfo.outputPath('floating-tour-desktop.png') });
   await page.setViewportSize({ width: 390, height: 844 });
   await next(page, 'embedding-detail');
   await checkLayout(page);
-  const top = (await parameter.boundingBox())!, bottom = (await guide(page).boundingBox())!;
-  expect(bottom.y).toBeGreaterThanOrEqual(top.y + top.height);
-  await expect(page.locator('#tour-next-btn')).toBeInViewport();
-  await expect(page.locator('#tour-back-btn')).toBeInViewport();
+  await page.screenshot({ path: testInfo.outputPath('floating-tour-phone.png') });
 });
