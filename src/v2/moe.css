@@ -949,7 +949,7 @@ footer.note { font-size: 11.5px; color: var(--text-muted); margin-top: 6px; line
 .pdf-nt-row .pct { flex: 0 0 auto; text-align: right; font-variant-numeric: tabular-nums; color: var(--text-muted); }
 
 /* Emphasize sample selection during the matching tutorial step. */
-.moe-root:has([data-tour-step="select-sample"]) .prompt-picker select {
+.moe-root:has([data-tour-step="what-is-moe"]) .prompt-picker select {
   outline: 2px solid var(--series-1);
   outline-offset: 4px;
   animation: sample-picker-pulse 1.6s ease-in-out infinite;
@@ -958,7 +958,7 @@ footer.note { font-size: 11.5px; color: var(--text-muted); margin-top: 6px; line
   50% { outline-color: transparent; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .moe-root:has([data-tour-step="select-sample"]) .prompt-picker select { animation: none; }
+  .moe-root:has([data-tour-step="what-is-moe"]) .prompt-picker select { animation: none; }
 }
 .architecture-tutorial .tour-token-picker[hidden] { display: none; }
 /* The guide floats above full-viewport modals; parameter count remains in document flow. */

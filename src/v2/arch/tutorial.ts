@@ -11,6 +11,7 @@ export type TutorialView =
 
 export interface TutorialStep {
   id: string;
+  /** The introduction is unnumbered (0); flow operations are numbered 1–9. */
   mainStep: number;
   /** Zero is the main overview; subsequent views use dotted substep numbers. */
   substep: number;
@@ -21,21 +22,20 @@ export interface TutorialStep {
   view: TutorialView;
 }
 
-/** Keep every view as a stop, grouped into two introductions and nine flow blocks. */
+/** Keep every view as a stop, grouped into one introduction and nine flow blocks. */
 export function buildTutorial(flow: PromptFlow): TutorialStep[] {
   const steps: TutorialStep[] = [];
   const add = (id: string, block: number | null, phase: TutorialPhase, title: string, text: string, view: TutorialView) => {
     const previous = steps.at(-1);
-    const mainStep = previous && block !== null && previous.block === block
+    const mainStep = view.kind === 'intro' ? 0 : previous && block !== null && previous.block === block
       ? previous.mainStep : (previous?.mainStep ?? 0) + 1;
     const substep = previous && mainStep === previous.mainStep ? previous.substep + 1 : 0;
     steps.push({ id, mainStep, substep, block, phase, title, text, view });
   };
-  add('what-is-moe', null, 'initial', 'What is Mixture of Experts?', 'Mixture of Experts (MoE) is a neural network architecture with multiple experts—small neural networks that share the work. For each token, a router selects only a few experts. Experts learn patterns during training; they are not assigned subjects such as math or coding. Attention lets each token gather context from earlier tokens and itself. Then, in the MoE operation, a router selects a few experts to process each token’s hidden vector. Their outputs are combined using the router’s weights. These operations repeat through the model’s Transformer Blocks.', { kind: 'intro' });
-  add('select-sample', null, 'initial', 'Select model and prompt sample', 'Choose a model and a sample prompt above, or keep the current selections. Next begins the walkthrough at Embedding.', { kind: 'intro' });
+  add('what-is-moe', null, 'initial', 'What is Mixture-of-Experts?', '**Mixture of Experts (MoE)** is a neural network architecture that replaces the dense **feed-forward network (FFN)** layer in a Transformer with a collection of independent sub-networks called **experts**. A small learned **router** (or gating network) scores every expert for each token and sends the token to only the **top-k** highest-scoring ones, typically 2 to 8 out of dozens or hundreds. The outputs of the selected experts are combined, weighted by their router scores. Because only a **small subset of experts is active per token**, the compute per token is a fraction of that of a dense model with the same total parameter count. This **sparse activation** lets language models scale to hundreds of billions of parameters while keeping inference cost close to that of a much smaller model. Choose a model and sample prompt, or keep the current selections.', { kind: 'intro' });
   const pair = (id: string, block: number, title: string, text: string, stageKey: string) => {
     add(id, block, 'initial', title, text, { kind: 'overview' });
-    add(`${id}-detail`, block, 'initial', `${title} · inside the operation`, '', { kind: 'stage', stageKey });
+    add(`${id}-detail`, block, 'initial', title, '', { kind: 'stage', stageKey });
   };
   pair('embedding', 0, 'Embedding', `A token is a small piece of text, often a word or part of one. Each piece becomes a vector of ${flow.hidden_size} numbers. Next opens the selected piece’s embedding.`, 'embed');
   pair('norm-attention', 1, 'RMSNorm before Attention', 'Normalize a copy of each token’s vector. Attention reads this copy while the original residual stream continues alongside it.', 'ln1');
@@ -67,7 +67,7 @@ export function buildTutorial(flow: PromptFlow): TutorialStep[] {
     add('combined', 5, routedPhase, 'Combined Weighted Output', '', { kind: 'stage', stageKey: 'moe-combine-all' });
   }
   add('residual-ffn', 6, routedPhase, 'Residual after the feed-forward operation', 'Add the feed-forward contribution back to the residual stream. This becomes the next Transformer Block’s input.', { kind: 'overview' });
-  add('residual-ffn-detail', 6, routedPhase, 'Residual after the feed-forward operation · inside', '', { kind: 'stage', stageKey: 'add2' });
+  add('residual-ffn-detail', 6, routedPhase, 'Residual after the feed-forward operation', '', { kind: 'stage', stageKey: 'add2' });
   add('repeat', 6, 'final', 'The Transformer Blocks repeat', `The whole Transformer Block card repeats these operations through Block ${flow.num_layers}. We have moved directly to that last card. The model still processed every preceding block in order. Next introduces the operations after the repeated blocks.`, { kind: 'repeat' });
   add('final-norm', 7, 'final', 'Final RMSNorm', `After all ${flow.num_layers} Transformer Blocks, normalize the stream once more with separate learned gains. This operation sits outside the repeating card.`, { kind: 'overview' });
   add('final-norm-detail', 7, 'final', 'Final RMSNorm · conceptual illustration', '', { kind: 'stage', stageKey: 'final-norm' });

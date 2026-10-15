@@ -81,10 +81,10 @@
 .domain-tour-controls .play-btn { font-weight: 700; border-width: 1.5px; border-color: var(--text-secondary); }
 .domain-tour-controls .play-btn:disabled { border-color: var(--border); }
 .domain-tour-controls .play-btn { margin-left: 0; }
-.domain-tour-primary-btn {
+.domain-tour-primary-btn, .tour-primary-btn {
   background: var(--seq-500); border-color: var(--seq-500); color: #fff;
 }
-.domain-tour-primary-btn:hover { background: color-mix(in srgb, var(--seq-500) 85%, black); }
+.domain-tour-primary-btn:hover, .tour-primary-btn:hover { background: color-mix(in srgb, var(--seq-500) 85%, black); }
 .tour-overlay-br { justify-content: flex-end; }
 .tour-card-draggable { cursor: grab; user-select: none; }
 .tour-card-draggable:active { cursor: grabbing; }
