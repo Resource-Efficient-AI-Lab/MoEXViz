@@ -213,6 +213,11 @@ export function matBlock(title: string, dimLabel: string, inner: string, big?: b
     '<div class="mm-dim" style="font-size:' + dimSz + ';color:var(--text-muted);margin-top:' + (big ? '7px' : '5px') + ';font-variant-numeric:tabular-nums;">' + dimLabel + '</div>' +
     '</div>';
 }
+/** Enlarge artwork around its existing center without changing the equation's layout tracks.
+ * The wrapper also keeps reveal transforms on operands/cells independent of this scale. */
+export function enlargedMatBlock(title: string, dimLabel: string, inner: string) {
+  return matBlock(title, dimLabel, '<div class="mm-enlarged-art">' + inner + '</div>');
+}
 export function resultBlock(title: string, dimLabel: string, inner: string, big?: boolean, revealLast?: boolean) {
   const titleSz = big ? '14px' : '11px', dimSz = big ? '12px' : '10px', pad = big ? '12px 16px' : '8px 12px';
   return '<div class="mm-operand"' + (revealLast ? ' data-reveal-last' : '') + ' style="text-align:center;background:color-mix(in srgb, var(--seq-500) 8%, var(--surface-1));border:1.5px solid var(--seq-500);border-radius:10px;padding:' + pad + ';">' +
