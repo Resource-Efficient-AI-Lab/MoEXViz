@@ -555,7 +555,7 @@ export function ArchitectureTab({ visible, modelKey, loading, flow, promptIndex,
   const embedHtml = useMemo(() => ({ __html: outer ? flowBlockInnerHtml(outer.embed) : '' }), [outer]);
   const finalNormHtml = useMemo(() => ({ __html: outer ? flowBlockInnerHtml(outer.finalNorm) : '' }), [outer]);
   const finalOutputHtml = useMemo(() => ({ __html: outer ? flowBlockInnerHtml(outer.finalOutput) : '' }), [outer]);
-  // The final norm illustrates the operation; the output shows recorded probabilities.
+  // The final norm shows the tensor operation; the output shows recorded probabilities.
   const openFinalOutput = useCallback(() => archApiRef.current?.openStage('final-output'), []);
   const openFinalNorm = useCallback(() => archApiRef.current?.openStage('final-norm'), []);
 

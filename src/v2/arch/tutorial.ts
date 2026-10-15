@@ -70,7 +70,7 @@ export function buildTutorial(flow: PromptFlow): TutorialStep[] {
   add('residual-ffn-detail', 6, routedPhase, 'Residual after the feed-forward operation', '', { kind: 'stage', stageKey: 'add2' });
   add('repeat', 6, 'final', 'The Transformer Blocks repeat', `The whole Transformer Block card repeats these operations through Block ${flow.num_layers}. We have moved directly to that last card. The model still processed every preceding block in order. Next introduces the operations after the repeated blocks.`, { kind: 'repeat' });
   add('final-norm', 7, 'final', 'Final RMSNorm', `After all ${flow.num_layers} Transformer Blocks, normalize the stream once more with separate learned gains. This operation sits outside the repeating card.`, { kind: 'overview' });
-  add('final-norm-detail', 7, 'final', 'Final RMSNorm · conceptual illustration', '', { kind: 'stage', stageKey: 'final-norm' });
+  add('final-norm-detail', 7, 'final', 'Final RMSNorm · normalize the final stream', '', { kind: 'stage', stageKey: 'final-norm' });
   add('final-output', 8, 'final', 'Final Output', 'The model projects the normalized final state into vocabulary scores and applies softmax. Next shows its recorded probabilities for the next token after the complete prompt.', { kind: 'overview' });
   add('final-output-detail', 8, 'final', 'Final Output · next-token predictions', '', { kind: 'stage', stageKey: 'final-output' });
   return steps;

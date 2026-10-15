@@ -77,25 +77,18 @@ export function buildOuterFlowBlocks(DATA: PromptFlow, root: HTMLElement): Outer
     // 8. Final RMSNorm (thin) — `model.norm`, the one norm that is NOT part of any transformer
     // block: it runs once on the last layer's output, before the LM head. It therefore sits
     // OUTSIDE the card, between the stage and Final Output.
-    // The proposal gated it to the last layer (it is only reached there). Shown on every layer
-    // instead, by request — so the "not per-layer" fact has to be carried elsewhere. Two paths
-    // carry it, and neither was ever the hover popover: `finalNormText()` in narration.ts opens the
-    // tour card with it, and (since the popover was removed on 2026-08-03) so does the
-    // `final-output` math stage — the one stage that kept its block's popover TITLE as a bolded
-    // lead, because the modal header there never names the norm. Its own <h4> is the bare "RMSNorm"
-    // (matching the two in-card norms) as of 2026-07-31, by request: sitting outside the card,
-    // after the loop-back, is what marks it as the odd one out.
+    // Shown on every selected layer, while its math stage always reads the final
+    // block's tensors. The tour and modal explain that this runs outside the loop.
     finalNorm: {
       title: 'RMSNorm', accent: yellow, extraClass: 'thin final-norm',
       html: '',
-      clickHint: 'click to see where the final numbers come from',
+      clickHint: 'click for full RMSNorm math',
     },
     finalOutput: {
       title: 'Final Output', accent: violet, extraClass: 'narrow out-narrow',
       html: '<div class="dims" style="margin-bottom:5px">softmax %,&nbsp;layer&nbsp;' + DATA.num_layers + '</div>' + ntRows,
-      // No clickHint (2026-08-01, by request). The block still opens the final-output math stage;
-      // the Final RMSNorm immediately upstream carries the same hint and opens the same stage, so
-      // the affordance is not lost — the hint was just printing twice, side by side.
+      // No clickHint (2026-08-01, by request). This block opens the predictions;
+      // the Final RMSNorm immediately upstream opens its tensor operation.
     },
   };
 }

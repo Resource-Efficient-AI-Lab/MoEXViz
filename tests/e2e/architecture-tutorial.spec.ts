@@ -224,6 +224,38 @@ async function checkView(page: Page, id: string) {
 }
 
 for (const model of ['olmoe', 'jetmoe', 'deepseek'] as Model[]) {
+  test(`${model}: final RMSNorm shares the usual tensor layout and the last residual stream`, async ({ page }, testInfo) => {
+    const errors: string[] = [];
+    page.on('pageerror', error => errors.push(error.message));
+    const flow = await load(page, model);
+    await advanceTo(page, 'repeat');
+    await expect(page.locator('#flow-block-label .title')).toHaveText(`Transformer Block ${flow.num_layers} of ${flow.num_layers}`);
+    await page.locator('.layer-card .pdf-block').last().click();
+    await expect(page.locator('#math-content .mm-operand')).toHaveCount(3);
+    const finalResidual = await page.locator('#math-content .mm-operand').last().locator('.mm-cell')
+      .evaluateAll(cells => cells.map(cell => (cell as HTMLElement).style.background));
+    await page.locator('#math-modal-close').click();
+    await page.locator('.pdf-block.final-norm').click();
+    await expect(page.locator('#math-content .mm-label')).toHaveText(['x (before)', 'weight γ', 'normalized stream']);
+    await expect(page.locator('#math-content .mm-cell')).toHaveCount((2 * flow.tokens.length + 1) * 20);
+    await expect(page.locator('#math-content .conceptual-norm, #math-content details, #math-content .diagram-legend')).toHaveCount(0);
+    await expect(page.locator('#math-content')).not.toContainText(/approximate|estimate|reconstruct|data details/i);
+    const normGrids = await page.locator('#math-content .mm-operand').evaluateAll(operands =>
+      operands.map(operand => [...operand.querySelectorAll<HTMLElement>('.mm-cell')].map(cell => cell.style.background)));
+    expect(normGrids[0]).toEqual(finalResidual);
+    expect(normGrids[0]).not.toEqual(normGrids[2]);
+    await page.locator('#math-content .mm-staged').click();
+    await page.screenshot({ path: testInfo.outputPath('final-rmsnorm.png') });
+    await page.locator('#math-modal-close').click();
+    await page.locator('#flow-prev').click();
+    await expect(page.locator('#flow-block-label .title')).toHaveText(`Transformer Block ${flow.num_layers - 1} of ${flow.num_layers}`);
+    await page.locator('.pdf-block.final-norm').click();
+    const reopenedGrids = await page.locator('#math-content .mm-operand').evaluateAll(operands =>
+      operands.map(operand => [...operand.querySelectorAll<HTMLElement>('.mm-cell')].map(cell => cell.style.background)));
+    expect(reopenedGrids).toEqual(normGrids);
+    expect(errors).toEqual([]);
+  });
+
   test(`${model}: architecture equations center graphics and complete rows`, async ({ page }, testInfo) => {
     const errors: string[] = [];
     page.on('pageerror', error => errors.push(error.message));
@@ -308,9 +340,8 @@ for (const model of ['olmoe', 'jetmoe', 'deepseek'] as Model[]) {
       if (id === 'router-all' && model === 'olmoe') await page.screenshot({ path: testInfo.outputPath('router-all.png') });
       if (id === 'repeat') await expect(page.locator('#flow-block-label .title')).toHaveText(`Transformer Block ${flow.num_layers} of ${flow.num_layers}`);
       if (id === 'final-norm-detail') {
-        await expect(page.locator('.conceptual-norm')).toBeVisible();
-        await expect(page.locator('#math-content .diagram-legend')).toContainText('Conceptual illustration');
-        await expect(page.locator('#math-content .mm-cell')).toHaveCount(0);
+        await expect(page.locator('#math-content .mm-label')).toHaveText(['x (before)', 'weight γ', 'normalized stream']);
+        await expect(page.locator('#math-content .mm-cell')).toHaveCount((2 * flow.tokens.length + 1) * 20);
       }
       if (id === 'final-output-detail') {
         await expect(page.locator('.prediction-row')).toHaveCount(flow.next_token_candidates.length);
@@ -430,7 +461,7 @@ test('manual operation detours, inactive experts and model reset', async ({ page
   await expect(page.locator('#flow-block-label .title')).toHaveText(`Transformer Block 3 of ${flow.num_layers}`);
   await page.locator('#moe-grid-close').click();
   await page.locator('.pdf-block.final-norm').click();
-  await expect(page.locator('.conceptual-norm')).toBeVisible();
+  await expect(page.locator('#math-content .mm-label')).toHaveText(['x (before)', 'weight γ', 'normalized stream']);
   await page.locator('#math-modal-close').click();
   await page.locator('#model-select').selectOption('jetmoe');
   await at(page, 'what-is-moe');
