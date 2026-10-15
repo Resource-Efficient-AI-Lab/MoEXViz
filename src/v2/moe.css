@@ -962,7 +962,7 @@ footer.note { font-size: 11.5px; color: var(--text-muted); margin-top: 6px; line
 }
 .architecture-tutorial .tour-token-picker[hidden] { display: none; }
 /* The guide floats above full-viewport modals; parameter count remains in document flow. */
-.architecture-tutorial .tour-overlay { background: transparent; }
+.architecture-tutorial .tour-overlay { background: transparent; justify-content: flex-end; }
 .architecture-tutorial .tour-card { padding: 16px 20px; }
 .architecture-tutorial .tour-controls { margin-top: auto; padding-top: 12px; }
 .architecture-tutorial .tour-prose { flex: 1 1 auto; }
