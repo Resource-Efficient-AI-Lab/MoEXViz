@@ -133,21 +133,30 @@ test('full-viewport popup dims parameters and leaves the floating guide interact
   await expect(parameter).not.toHaveAttribute('inert');
 });
 
-test('entire architecture flow fits above the full-width parameter panel', async ({ page }, testInfo) => {
-  for (const viewport of [{ width: 1440, height: 900 }, { width: 1366, height: 768 }, { width: 1024, height: 768 }, { width: 1440, height: 640 }]) {
+test('architecture flow fits the width and the parameter panel remains reachable', async ({ page }, testInfo) => {
+  for (const viewport of [{ width: 1449, height: 473 }, { width: 1440, height: 900 }, { width: 1366, height: 768 }, { width: 1024, height: 768 }, { width: 1440, height: 640 }]) {
     await page.setViewportSize(viewport);
     for (const model of ['olmoe', 'jetmoe', 'deepseek'] as Model[]) {
       await load(page, model);
       await expect.poll(() => page.evaluate(() => {
         const dock = document.querySelector('#param-count-panel')!.getBoundingClientRect();
-        const flow = document.querySelector('.pdf-scroll')!.getBoundingClientRect();
+        const diagram = document.querySelector<HTMLElement>('.pdf-scroll')!;
+        const flow = diagram.getBoundingClientRect();
+        const width = diagram.parentElement!.clientWidth;
+        const expectedScale = Math.min(1, width / Math.max(1100, width));
+        const scale = new DOMMatrix(getComputedStyle(diagram).transform).a;
         const arrows = [...document.querySelectorAll('.skip-overlay, .loop-overlay')].map(el => el.getBoundingClientRect());
         return {
           fits: [flow, ...arrows].every(rect => rect.top >= 0 && rect.bottom <= dock.top && rect.left >= 0 && rect.right <= innerWidth),
-          noPageScroll: document.documentElement.scrollHeight <= innerHeight + 1,
-          atTop: window.scrollY === 0,
+          fitsWidth: Math.abs(scale - expectedScale) < 0.00001,
         };
-      }), { message: `${model} at ${viewport.width}×${viewport.height}` }).toEqual({ fits: true, noPageScroll: true, atTop: true });
+      }), { message: `${model} at ${viewport.width}×${viewport.height}` }).toEqual({ fits: true, fitsWidth: true });
+      await page.locator('#param-count-panel').scrollIntoViewIfNeeded();
+      await expect.poll(() => page.locator('#param-count-panel').evaluate(el => {
+        const rect = el.getBoundingClientRect();
+        // Allow subpixel rounding when the browser scrolls the panel into view.
+        return rect.top >= -1 && rect.bottom <= innerHeight + 1 && rect.left >= -1 && rect.right <= innerWidth + 1;
+      }), { message: `${model} parameter panel at ${viewport.width}×${viewport.height}` }).toBe(true);
       if (viewport.width === 1366 && model === 'olmoe') {
         await page.screenshot({ path: testInfo.outputPath('compact-flow.png') });
       }
