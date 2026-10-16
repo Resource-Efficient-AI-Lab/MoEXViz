@@ -334,8 +334,8 @@ export function ArchitectureTab({ visible, modelKey, loading, flow, promptIndex,
   const bodyHtml = useMemo(() => ({ __html: mathStage ? mathStage.payload.html : '' }), [mathStage]);
   const headerHtml = useMemo(() => ({ __html: mathStage ? mathStage.payload.headerExtra : '' }), [mathStage]);
 
-  // Fit the diagram above the content-sized parameter panel. The floating tour does not
-  // consume layout space or change diagram size when dragged or dismissed.
+  // Fit the diagram to the panel width; short windows scroll to the parameter panel.
+  // The floating tour does not change diagram size when dragged or dismissed.
   useEffect(() => {
     const root = architectureRef.current, card = parameterRef.current;
     if (!flow || !visible || !root || !card) return;
@@ -347,15 +347,11 @@ export function ArchitectureTab({ visible, modelKey, loading, flow, promptIndex,
       if (disposed) return;
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
-        // Keep the diagram's natural layout readable, then scale the whole illustration,
-        // including the residual and loop-back lanes, into the remaining viewport.
+        // Keep the natural layout readable, scaling down only to fit the available width.
         const width = Math.max(1100, viewport.clientWidth);
         diagram.style.width = `${width}px`;
         const height = diagram.offsetHeight;
-        const top = viewport.getBoundingClientRect().top + window.scrollY;
-        // Include the two panels' margins, lower padding, page padding and rounding slack.
-        const available = Math.max(1, window.innerHeight - top - Math.ceil(card.getBoundingClientRect().height) - 56);
-        const scale = Math.min(1, viewport.clientWidth / width, available / height);
+        const scale = Math.min(1, viewport.clientWidth / width);
         diagram.style.transform = `scale(${scale})`;
         diagram.style.setProperty('--flow-scale', String(scale));
         diagram.style.left = `${Math.max(0, (viewport.clientWidth - width * scale) / 2)}px`;
