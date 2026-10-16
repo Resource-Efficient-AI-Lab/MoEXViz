@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { CATEGORY_LABELS } from '../../data/categories';
 import { CATEGORY_PALETTE } from '../../components/ClusterPlot/categoryPalette';
 import { firstMoeLayer } from '../../utils/domainStats';
+import { useViewportBox } from '../useViewportBox';
 import type { DomainSpecializationData } from '../../data/types';
 
 const VIEW_W = 640;
@@ -31,6 +32,9 @@ interface DomainRateChartProps {
  */
 export function DomainRateChart({ data, activeCategories }: DomainRateChartProps) {
   const [hover, setHover] = useState<HoverState | null>(null);
+  const [chartRef, box] = useViewportBox<HTMLDivElement>();
+  // Only the plotting area gains height; labels retain the existing horizontal scale.
+  const viewH = box ? Math.max(140, (box.height - box.chrome) * VIEW_W / Math.max(1, box.width - 24)) : VIEW_H;
   const numLayers = data.num_layers;
   const minLayer = firstMoeLayer(data);
   // Real layer indices, so hover labels and axis ticks keep saying what the model calls them.
@@ -58,7 +62,7 @@ export function DomainRateChart({ data, activeCategories }: DomainRateChartProps
   }, [series, layers]);
 
   const plotW = VIEW_W - PAD_L - PAD_R;
-  const plotH = VIEW_H - PAD_T - PAD_B;
+  const plotH = viewH - PAD_T - PAD_B;
   const lx = (layer: number) =>
     PAD_L + ((layer - minLayer) / Math.max(1, layers.length - 1)) * plotW;
   const ly = (v: number) => PAD_T + plotH - (v / yMax) * plotH;
@@ -78,9 +82,9 @@ export function DomainRateChart({ data, activeCategories }: DomainRateChartProps
         )}
       </p>
 
-      <div className="relative mt-4 rounded-md border border-ink/10 bg-paper p-3">
+      <div ref={chartRef} className="domain-rate-chart relative mt-4 rounded-md border border-ink/10 bg-paper p-3">
         <svg
-          viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
+          viewBox={`0 0 ${VIEW_W} ${viewH}`}
           className="w-full"
           role="img"
           aria-label="Domain rate by layer line chart"
@@ -115,7 +119,7 @@ export function DomainRateChart({ data, activeCategories }: DomainRateChartProps
               <text
                 key={li}
                 x={lx(li)}
-                y={VIEW_H - PAD_B + 16}
+                y={viewH - PAD_B + 16}
                 textAnchor="middle"
                 className="font-label"
                 fontSize={11}
@@ -126,7 +130,7 @@ export function DomainRateChart({ data, activeCategories }: DomainRateChartProps
             ))}
           <text
             x={PAD_L + plotW / 2}
-            y={VIEW_H - 4}
+            y={viewH - 4}
             textAnchor="middle"
             className="font-label"
             fontSize={11}
@@ -175,7 +179,7 @@ export function DomainRateChart({ data, activeCategories }: DomainRateChartProps
                         layer: li,
                         value: values[li],
                         x: (lx(li) / VIEW_W) * rect.width,
-                        y: (ly(values[li]) / VIEW_H) * rect.height,
+                        y: (ly(values[li]) / viewH) * rect.height,
                       });
                     }}
                     onMouseLeave={() => setHover(null)}

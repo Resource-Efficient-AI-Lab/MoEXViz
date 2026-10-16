@@ -65,8 +65,8 @@ function gridShape(n: number): { cols: number; rows: number } {
   return { cols, rows: Math.ceil(n / cols) };
 }
 
-/** Natural on-screen width of an `n`-expert grid, viewBox padding included — the size the grid
- *  refuses to grow past. Callers lay tiles out at this width so a low-expert model's grids sit
+/** Natural on-screen width of an `n`-expert grid, viewBox padding included. Callers scale tiles
+ *  from this width so a low-expert model's grids sit
  *  next to each other instead of being spread across equal-width columns sized for 64. */
 export function expertGridWidth(n: number): number {
   const { cols } = gridShape(n);
@@ -109,6 +109,8 @@ interface ExpertGridProps {
   /** Opens DomainCellModal for this cell — same pop-up the Histogram view's bars open. Optional
    *  only for callers that genuinely have nowhere to route it; every current one passes it. */
   onCellClick?: (expert: number) => void;
+  /** Fill a responsive tile supplied by the caller; fixed-size modal grids keep the natural cap. */
+  fillWidth?: boolean;
 }
 
 /**
@@ -125,6 +127,7 @@ export function ExpertGrid({
   topSet,
   sampleTokensFor,
   onCellClick,
+  fillWidth = false,
 }: ExpertGridProps) {
   const [hover, setHover] = useState<HoverState | null>(null);
   const reducedMotion = usePrefersReducedMotion();
@@ -237,10 +240,9 @@ export function ExpertGrid({
       <svg
         ref={svgRef}
         viewBox={`-1 -1 ${width + 2} ${height + 2}`}
-        // Shrink to fit a narrow column, but never grow past the natural cell size: a
-        // low-expert model (JetMoE routes over 8) would otherwise stretch its 4×2 block
-        // across the whole column and render cells twice the size of a 64-expert grid.
-        style={{ maxWidth: width + 2 }}
+        // Responsive callers size the tile in proportion to its expert count. Other callers
+        // retain the natural cap so a small model cannot stretch across an arbitrary column.
+        style={{ maxWidth: fillWidth ? '100%' : width + 2 }}
         className="w-full overflow-visible"
         role="img"
         aria-label={summary}

@@ -70,6 +70,12 @@
 }
 .domain-compare-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; align-items: start; }
 .domain-compare-col { min-width: 0; }
+/* Retain the laptop map size, then grow with the monitor without making an unbounded SVG. */
+.domain-umap-single { width: 100%; max-width: clamp(42rem, 35vw, 72rem); }
+.domain-rate-chart { max-width: 120rem; margin-inline: auto; }
+@media (min-width: 1921px) {
+  .domain-chart-tiles { justify-content: center; }
+}
 .domain-compare-col-title {
   margin: 0 0 8px; padding-bottom: 6px; border-bottom: 1.5px solid var(--border);
   font-size: 13px; font-weight: 700; color: var(--text-primary);

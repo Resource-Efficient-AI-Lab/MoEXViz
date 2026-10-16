@@ -1,5 +1,7 @@
 import { CATEGORY_LABELS } from '../../data/categories';
+import { useLayoutEffect } from 'react';
 import { CATEGORY_PALETTE } from '../../components/ClusterPlot/categoryPalette';
+import { useViewportBox } from '../useViewportBox';
 import type { DomainSpecializationData } from '../../data/types';
 
 interface TopExpertsSectionProps {
@@ -17,6 +19,26 @@ interface TopExpertsSectionProps {
  * directly (no baseline comparison). Not filtered by the shared picker — all six always show.
  */
 export function TopExpertsSection({ data, onSelect, compact = false }: TopExpertsSectionProps) {
+  const [gridRef, box] = useViewportBox<HTMLDivElement>(true, true);
+  useLayoutEffect(() => {
+    const grid = gridRef.current;
+    if (!grid) return;
+    grid.style.zoom = '';
+    grid.style.width = '';
+    if (!box) return;
+    const fit = (scale: number) => {
+      grid.style.zoom = String(scale);
+      grid.style.width = `${box.width / scale}px`;
+      return grid.getBoundingClientRect().height;
+    };
+    let low = 0.35, high = box.width / (compact ? 340 : 1100);
+    for (let attempt = 0; attempt < 12; attempt++) {
+      const candidate = (low + high) / 2;
+      if (fit(candidate) <= box.height) low = candidate;
+      else high = candidate;
+    }
+    fit(low);
+  }, [box, compact, gridRef]);
   return (
     <div>
       {!compact && (
@@ -27,7 +49,8 @@ export function TopExpertsSection({ data, onSelect, compact = false }: TopExpert
       )}
 
       <div
-        className={`grid grid-cols-1 gap-4 ${compact ? '' : 'mt-4 sm:grid-cols-2 lg:grid-cols-3'}`}
+        ref={gridRef}
+        className={`domain-specialists grid grid-cols-1 gap-4 ${compact ? '' : 'mt-4 sm:grid-cols-2 lg:grid-cols-3'}`}
       >
         {data.domains.map((category) => {
           const color = CATEGORY_PALETTE[category] ?? 'var(--color-muted)';

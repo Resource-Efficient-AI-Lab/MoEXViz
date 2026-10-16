@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { CATEGORY_LABELS } from '../../data/categories';
 import { CATEGORY_HUES, CATEGORY_PALETTE } from '../../components/ClusterPlot/categoryPalette';
 import { heatColor } from '../../components/SpecializationView/heatColor';
+import { useViewportBox } from '../useViewportBox';
 import type { DomainSpecializationData } from '../../data/types';
 
 /** Card gap, as a number rather than a `gap-4` class: `fitHistogramCards` solves a layout that
@@ -59,17 +60,17 @@ export function fitHistogramCards(
   chrome: number,
   inset: number,
   availW: number,
-  availH: number
+  availH: number,
+  maxCardWidth = chartMaxWidth(numExperts),
+  aspect = chartAspect(numExperts)
 ): { cardWidth: number; columns: number } {
-  const natural = chartMaxWidth(numExperts);
-  const aspect = chartAspect(numExperts);
 
   let best = { cardWidth: 0, columns: 1, rows: Infinity };
   for (let cols = 1; cols <= count; cols++) {
     const rows = Math.ceil(count / cols);
     const byWidth = (availW - (cols - 1) * CARD_GAP) / cols;
     const byHeight = ((availH - (rows - 1) * CARD_GAP) / rows - chrome) / aspect + inset;
-    const cardWidth = Math.min(natural, byWidth, byHeight);
+    const cardWidth = Math.min(maxCardWidth, byWidth, byHeight);
     // A sub-pixel win is not a win — it would hand the layout to a taller stack for nothing.
     const wins =
       cardWidth > best.cardWidth + 0.5 || (cardWidth > best.cardWidth - 0.5 && rows < best.rows);
@@ -113,6 +114,12 @@ export function HistogramSection({
     () => data.domains.filter((c) => activeCategories.has(c)),
     [data, activeCategories]
   );
+  const [cardsRef, box] = useViewportBox<HTMLDivElement>(!fit, true);
+  const viewportFit = box && categories.length
+    ? fitHistogramCards(categories.length, data.num_experts, 42, 18, box.width, box.height,
+      Infinity, compact ? 84 / 480 : chartAspect(data.num_experts))
+    : null;
+  const layout = fit ?? viewportFit;
 
   return (
     <div>
@@ -127,13 +134,14 @@ export function HistogramSection({
           exactly as before, while JetMoE's narrow cards flow side by side instead of stacking
           into a tall ribbon of mostly-empty rows. */}
       <div
-        className={`flex flex-wrap items-start${hideHint || compact ? '' : ' mt-4'}${fit ? ' mx-auto' : ''}`}
+        ref={cardsRef}
+        className={`flex flex-wrap items-start${hideHint || compact ? '' : ' mt-4'}${layout ? ' mx-auto' : ' domain-chart-tiles'}`}
         style={{
           gap: CARD_GAP,
           // Cap the row so it breaks after exactly `columns` — see ExpertGridSection for why the
           // wrap point has to be forced rather than left to the natural width.
-          ...(fit
-            ? { maxWidth: fit.columns * fit.cardWidth + (fit.columns - 1) * CARD_GAP }
+          ...(layout
+            ? { maxWidth: layout.columns * layout.cardWidth + (layout.columns - 1) * CARD_GAP }
             : null),
         }}
       >
@@ -143,7 +151,7 @@ export function HistogramSection({
             category={category}
             rates={data.activation_rate[category][layer]}
             onBarClick={(expert) => onBarClick(category, expert)}
-            cardWidth={fit?.cardWidth}
+            cardWidth={layout?.cardWidth}
             compact={compact}
           />
         ))}
@@ -180,8 +188,10 @@ function HistogramChart({ category, rates, onBarClick, cardWidth, compact = fals
   const u = compact ? 1.5 : 1;
 
   const W = compact ? 480 : chartUnitsWide(n);
-  // The fit-to-box width when this is the all-categories window, the natural cap otherwise.
-  const maxWidth = compact ? undefined : (cardWidth ?? chartMaxWidth(n));
+  // Modal fits use measured widths; page charts can grow to 150% on larger monitors.
+  const naturalWidth = chartMaxWidth(n);
+  const maxWidth = cardWidth ?? (compact ? undefined
+    : `clamp(${naturalWidth}px, calc(100vw * ${naturalWidth / 1920}), ${naturalWidth * 1.5}px)`);
 
   const barW = (W - padL - padR) / n - gap;
   const barX = (e: number) => padL + e * (barW + gap);

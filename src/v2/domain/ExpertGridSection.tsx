@@ -7,6 +7,7 @@ import {
   expertGridWidth,
 } from '../../components/SpecializationView/ExpertGrid';
 import { topKExperts, tokensForExpert } from '../../utils/domainStats';
+import { useViewportBox } from '../useViewportBox';
 import type { DomainSpecializationData } from '../../data/types';
 
 /** Tile gaps, as numbers rather than `gap-x-12 gap-y-6` classes: `fitExpertGridTiles` has to solve
@@ -40,7 +41,8 @@ export function fitExpertGridTiles(
   numExperts: number,
   availW: number,
   availH: number,
-  captionH = TILE_CAPTION_H
+  captionH = TILE_CAPTION_H,
+  maxTileWidth = expertGridWidth(numExperts)
 ): { tileWidth: number; columns: number } {
   const natural = expertGridWidth(numExperts);
   const aspect = expertGridHeight(numExperts) / natural;
@@ -50,7 +52,7 @@ export function fitExpertGridTiles(
     const rows = Math.ceil(count / cols);
     const byWidth = (availW - (cols - 1) * TILE_GAP.x) / cols;
     const byHeight = (availH - (rows - 1) * TILE_GAP.y - rows * captionH) / rows / aspect;
-    const tileWidth = Math.min(natural, byWidth, byHeight);
+    const tileWidth = Math.min(maxTileWidth, byWidth, byHeight);
     // A sub-pixel win is not a win — it would hand the layout to a taller stack for nothing.
     const wins =
       tileWidth > best.tileWidth + 0.5 || (tileWidth > best.tileWidth - 0.5 && rows < best.rows);
@@ -70,8 +72,8 @@ interface ExpertGridSectionProps {
   /** Set by AllCategoriesModal, which writes its own one-liner: this one talks about toggling
    *  category pills, and there are none in that window. */
   hideHint?: boolean;
-  /** Fit-to-box override from `fitExpertGridTiles`. Absent in the tab, where the page scrolls and
-   *  tiles want their natural size; set by AllCategoriesModal, which has a fixed box to fill. */
+  /** Fit-to-box override from `fitExpertGridTiles`. Absent in the tab, where tiles can grow on
+   *  large monitors; set by AllCategoriesModal, which has a fixed box to fill. */
   fit?: { tileWidth: number; columns: number };
 }
 
@@ -95,6 +97,15 @@ export function ExpertGridSection({
     [data, activeCategories]
   );
   const tileWidth = fit?.tileWidth ?? expertGridWidth(data.num_experts);
+  const [tilesRef, box] = useViewportBox<HTMLDivElement>(!fit, true);
+  const viewportFit = box && categories.length
+    ? fitExpertGridTiles(categories.length, data.num_experts, box.width, box.height, TILE_CAPTION_H, Infinity)
+    : null;
+  const layout = fit ?? viewportFit;
+  // Apply the same growth factor to every model's natural width, preserving equal cell sizes.
+  // Explicit modal fits keep their measured dimensions.
+  const displayWidth = layout ? layout.tileWidth
+    : `clamp(${tileWidth}px, calc(100vw * ${tileWidth / 1920}), ${tileWidth * 1.5}px)`;
 
   return (
     <div>
@@ -106,18 +117,18 @@ export function ExpertGridSection({
         </p>
       )}
 
-      {/* Flex-wrap, not a 3-column grid: equal-width columns are sized for a 64-expert model, so
-          JetMoE's narrow 8-expert grids would sit marooned in the middle of an empty third. Tiles
-          take their natural width and pack left, which also puts them side by side for comparison. */}
+      {/* Flex-wrap keeps JetMoE's narrow grids beside one another. On large screens the tiles
+          grow proportionally and the group centers once the tiles reach their size cap. */}
       <div
-        className={`flex flex-wrap${hideHint ? '' : ' mt-5'}${fit ? ' mx-auto' : ''}`}
+        ref={tilesRef}
+        className={`flex flex-wrap${hideHint ? '' : ' mt-5'}${layout ? ' mx-auto' : ' domain-chart-tiles'}`}
         style={{
           columnGap: TILE_GAP.x,
           rowGap: TILE_GAP.y,
           // Cap the row so it breaks after exactly `columns`: fitted tiles are narrow enough that
           // free wrapping would pull a fourth into the first row and leave a ragged 4 + 2.
-          ...(fit
-            ? { maxWidth: fit.columns * fit.tileWidth + (fit.columns - 1) * TILE_GAP.x }
+          ...(layout
+            ? { maxWidth: layout.columns * layout.tileWidth + (layout.columns - 1) * TILE_GAP.x }
             : null),
         }}
       >
@@ -132,7 +143,7 @@ export function ExpertGridSection({
               key={category}
               data-category-tile={category}
               className="max-w-full"
-              style={{ width: tileWidth }}
+              style={{ width: displayWidth }}
             >
               <figcaption className="mb-2 flex items-center gap-2">
                 <span
@@ -149,6 +160,7 @@ export function ExpertGridSection({
                 topSet={topSet}
                 sampleTokensFor={(expert) => tokensForExpert(data, category, layer, expert)}
                 onCellClick={(expert) => onCellClick(category, expert)}
+                fillWidth={!fit}
               />
             </figure>
           );
