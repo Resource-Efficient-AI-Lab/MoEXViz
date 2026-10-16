@@ -1102,7 +1102,9 @@ export function bootArchExplorer(
     let shift = 0;
     if (left < b.left + PAD) shift = b.left + PAD - left;
     else if (left + w > b.right - PAD) shift = b.right - PAD - (left + w);
-    pop.style.setProperty('--pop-shift', shift.toFixed(1) + 'px');
+    // The clamp measures screen pixels; the translation is applied inside the scaled diagram.
+    const scale = parseFloat(getComputedStyle(clipBox).getPropertyValue('--flow-scale')) || 1;
+    pop.style.setProperty('--pop-shift', (shift / scale).toFixed(1) + 'px');
   }
 
   // ---- the transformer-block deck: stage sizing + the ‹ › swipe ----

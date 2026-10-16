@@ -15,6 +15,7 @@ import { PromptsSection } from './PromptsSection';
 import { LayerSlider } from './LayerSlider';
 import { SUB_TABS, type SubTab } from './subTabs';
 import { useDraggable } from '../useDraggable';
+import { useViewportBox } from '../useViewportBox';
 import { analyzeUmap, firstMoeLayer, topKExperts, type UmapAnalysis } from '../../utils/domainStats';
 import { DOMAIN_MODELS, domainModel, type DomainModelKey } from './models';
 import type { DomainSpecializationData, UmapData } from '../../data/types';
@@ -1092,6 +1093,22 @@ const DomainTabBody = forwardRef<
  *  four sub-tabs, so the whole tab describes one measurement.
  *  `umap`/`loading`/`analysis` are owned by DomainTab now, not fetched here — see its own comment
  *  on the hook call — so this hint and the guided tour's first step always agree on the finding. */
+function FittedClusterPlot({ umap, active, single }: {
+  umap: UmapData;
+  active: Set<string>;
+  single: boolean;
+}) {
+  const [ref, box] = useViewportBox<HTMLDivElement>(true, true);
+  const maxWidth = box
+    ? Math.min(box.width, Math.max(0, box.height - box.chrome) * 640 / 440 + box.inset)
+    : undefined;
+  return (
+    <div ref={ref} className={single ? 'domain-umap-single mx-auto' : undefined} style={{ maxWidth }}>
+      <ClusterPlot umap={umap} activeCategories={active} />
+    </div>
+  );
+}
+
 function ExpertsUmapSection({
   umap,
   loading,
@@ -1117,7 +1134,7 @@ function ExpertsUmapSection({
 
   const plot = (u: UmapData | null, isLoading: boolean) =>
     u ? (
-      <ClusterPlot umap={u} activeCategories={active} />
+      <FittedClusterPlot umap={u} active={active} single={!comparing} />
     ) : (
       // Fixed-size placeholder matching ClusterPlot's 640:440 plot so the lazy load doesn't
       // reflow the panel when the data arrives.
@@ -1162,7 +1179,7 @@ function ExpertsUmapSection({
           ))}
         </div>
       ) : (
-        <div className="mx-auto mt-4 max-w-2xl">{plot(umap, loading)}</div>
+        <div className="mt-4">{plot(umap, loading)}</div>
       )}
     </div>
   );

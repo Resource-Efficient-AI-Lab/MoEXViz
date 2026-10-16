@@ -334,7 +334,7 @@ export function ArchitectureTab({ visible, modelKey, loading, flow, promptIndex,
   const bodyHtml = useMemo(() => ({ __html: mathStage ? mathStage.payload.html : '' }), [mathStage]);
   const headerHtml = useMemo(() => ({ __html: mathStage ? mathStage.payload.headerExtra : '' }), [mathStage]);
 
-  // Fit the diagram to the panel width; short windows scroll to the parameter panel.
+  // Fit the complete diagram proportionally; the cards never stretch independently.
   // The floating tour does not change diagram size when dragged or dismissed.
   useEffect(() => {
     const root = architectureRef.current, card = parameterRef.current;
@@ -347,16 +347,56 @@ export function ArchitectureTab({ visible, modelKey, loading, flow, promptIndex,
       if (disposed) return;
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
-        // Keep the natural layout readable, scaling down only to fit the available width.
-        const width = Math.max(1100, viewport.clientWidth);
+        const tall = window.innerHeight > 900;
+        // Start from a laptop-sized diagram on tall monitors, then grow the cards, their
+        // visualizations and labels together. Wider natural layouts remain unchanged on laptops.
+        const width = Math.max(1100, Math.min(tall ? 1322 : 1800, viewport.clientWidth));
         diagram.style.width = `${width}px`;
+        diagram.style.top = '0';
+        card.style.zoom = '';
+        card.style.width = '';
+        card.style.marginTop = '';
+        card.style.marginBottom = '';
+        archApiRef.current?.refreshFlowArcs();
         const height = diagram.offsetHeight;
-        const scale = Math.min(1, viewport.clientWidth / width);
+        const top = viewport.getBoundingClientRect().top;
+        const gap = card.getBoundingClientRect().top - viewport.getBoundingClientRect().bottom;
+        const budget = window.innerHeight - top - gap - 33;
+        const cardStyle = getComputedStyle(card);
+        const marginTop = parseFloat(cardStyle.marginTop);
+        const marginBottom = parseFloat(cardStyle.marginBottom);
+        let scale = tall ? viewport.clientWidth / width : Math.min(1.5, viewport.clientWidth / width);
+        if (tall) {
+          const measure = (candidate: number) => {
+            card.style.zoom = String(candidate);
+            card.style.width = `${root.clientWidth / candidate}px`;
+            card.style.marginTop = `${marginTop / candidate}px`;
+            card.style.marginBottom = `${marginBottom / candidate}px`;
+            return height * candidate + card.getBoundingClientRect().height;
+          };
+          // Parameter wrapping also changes with scale. Solve for the largest proportional
+          // fit rather than enlarging boxes without their contents or clipping the last panel.
+          if (measure(scale) > budget) {
+            let low = 0.35, high = scale;
+            for (let attempt = 0; attempt < 12; attempt++) {
+              const candidate = (low + high) / 2;
+              if (measure(candidate) <= budget) low = candidate;
+              else high = candidate;
+            }
+            scale = low;
+          }
+          measure(scale);
+        } else {
+          scale = Math.min(scale, Math.max(0.5, (budget - card.getBoundingClientRect().height) / height));
+        }
         diagram.style.transform = `scale(${scale})`;
         diagram.style.setProperty('--flow-scale', String(scale));
         diagram.style.left = `${Math.max(0, (viewport.clientWidth - width * scale) / 2)}px`;
-        viewport.style.height = `${Math.ceil(height * scale)}px`;
         archApiRef.current?.refreshFlowArcs();
+        const scaledHeight = diagram.getBoundingClientRect().height;
+        const available = tall ? budget - card.getBoundingClientRect().height : scaledHeight;
+        viewport.style.height = `${Math.ceil(Math.max(scaledHeight, available))}px`;
+        diagram.style.top = `${Math.max(0, (available - scaledHeight) / 2)}px`;
         archApiRef.current?.fitGridHeight(session.current.routerTab);
       });
     };
