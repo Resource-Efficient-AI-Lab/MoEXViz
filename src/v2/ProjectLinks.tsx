@@ -6,7 +6,6 @@ interface ProjectResource {
   icon: ReactNode;
 }
 
-// Add the video URL here when it is available.
 const PROJECT_RESOURCES: ProjectResource[] = [
   {
     label: 'Research paper',
@@ -31,6 +30,7 @@ const PROJECT_RESOURCES: ProjectResource[] = [
   },
   {
     label: 'Video walkthrough',
+    href: 'https://www.youtube.com/watch?v=BUPVOL-W2Cg&feature=youtu.be',
     icon: (
       <>
         <rect x="2" y="4" width="20" height="16" rx="4" />
