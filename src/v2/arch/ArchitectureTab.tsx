@@ -149,7 +149,7 @@ export function ArchitectureTab({ visible, modelKey, loading, flow, promptIndex,
 
   // ---- persistent guided tour: React owns the current step ----
   const [tourStep, setTourStep] = useState(0);
-  const [tourOpen, setTourOpen] = useState(true);
+  const [tourOpen, setTourOpen] = useState(false);
 
   // ---- the shared math modal: React owns whether it is open and which stage is showing ----
   // The stage's CONTENT is still built by archExplorer's string builders; React only commits it.
@@ -387,7 +387,9 @@ export function ArchitectureTab({ visible, modelKey, loading, flow, promptIndex,
           }
           measure(scale);
         } else {
-          scale = Math.min(scale, Math.max(0.5, (budget - card.getBoundingClientRect().height) / height));
+          // Short windows: keep the diagram readable (width-fit, at most 1x) and let the page
+          // scroll to the parameter card, rather than squeezing both into one screen.
+          scale = Math.min(scale, 1);
         }
         diagram.style.transform = `scale(${scale})`;
         diagram.style.setProperty('--flow-scale', String(scale));
@@ -494,8 +496,8 @@ export function ArchitectureTab({ visible, modelKey, loading, flow, promptIndex,
   useEffect(() => {
     if (!visible) return;
     resetTourPosition();
-    resumeTutorial();
-  }, [visible, resetTourPosition, resumeTutorial]);
+    // The tour no longer auto-opens on landing; the "Guided tour" button starts it.
+  }, [visible, resetTourPosition]);
 
   useEffect(() => {
     if (!flow) return;
@@ -518,7 +520,7 @@ export function ArchitectureTab({ visible, modelKey, loading, flow, promptIndex,
       onTokenChange: handleTokenChange,
     });
     archApiRef.current = api;
-    const active = previous.flow ? previous.active : true;
+    const active = previous.flow ? previous.active : false;
     session.current = {
       active, navigating: true, step: resume, layer: 0, token,
       routerOpen: false, routerTab: 'per-token', mathOpen: false, view: null,
