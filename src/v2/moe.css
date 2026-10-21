@@ -663,8 +663,10 @@ footer.note { font-size: 11.5px; color: var(--text-muted); margin-top: 6px; line
 .pdf-block.embed-narrow:hover { transform: none; box-shadow: none; }
 /* Hook for the Final Output block's content floor (see the `min-width: 1141px` query further down).
    Its own class rather than `.narrow`, which Embedding also carries. */
-/* nowrap keeps every chip on one line, so rows stay uniform height and no token wraps mid-word. */
-.pdf-block.embed-narrow .pdf-token-chip { padding: 3px 7px; font-size: 11.5px; cursor: pointer; white-space: nowrap; }
+/* Chips are shrink-to-fit, so ordinary tokens stay on one line. Only a chip wider than the block
+   (DeepSeek's "<|begin_of_sentence|>" when the block shrinks toward its 150px min-width) is capped
+   at the block's width and wraps inside its own border instead of spilling out of the block. */
+.pdf-block.embed-narrow .pdf-token-chip { padding: 3px 7px; font-size: 11.5px; cursor: pointer; white-space: normal; overflow-wrap: anywhere; max-width: 100%; box-sizing: border-box; }
 .pdf-block.compact { flex: 1 1 165px; min-width: 165px; padding: 12px 13px; }
 .pdf-block.compact h4 { font-size: 12.5px; }
 .pdf-block.compact .dims { font-size: 11px; }
